@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shopify Products</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background-color: #f8f9fa; display: flex; }
+
+        /* ✅ Sidebar Styling */
+        .sidebar {
+            width: 250px;
+            padding: 15px;
+            background: #1383df;
+            color: white;
+            height: 100vh;
+            position: fixed;
+            left: 0;
+            top: 0;
+            overflow-y: auto;
+            box-shadow: 2px 2px 10px rgba(0,0,0,0.2);
+        }
+        .sidebar h3 { margin-bottom: 10px; color: white; }
+        .sidebar select, .sidebar input, .sidebar button, .sidebar textarea {
+            width: 100%; 
+            padding: 8px; 
+            margin-bottom: 10px; 
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .sidebar select, .sidebar input, .sidebar textarea {
+            border: 1px solid #ddd;
+            height: 38px;
+        }
+        .sidebar button {
+            background: #ffffff;
+            color: #1383df;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .sidebar button:hover {
+            background: #f0f0f0;
+        }
+
+        /* ✅ Adjusted Main Content */
+        .content {
+            margin-left: 270px;
+            width: calc(100% - 270px);
+            padding: 20px;
+        }
+        .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; }
+        .product-card { 
+            background: white; border: 1px solid #ddd; border-radius: 5px; padding: 10px; 
+            text-align: center; transition: 0.3s; box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
+        }
+        .product-card:hover { transform: scale(1.02); }
+        img { max-width: 100%; height: auto; border-radius: 5px; }
+        .product-title { font-size: 16px; font-weight: bold; margin: 10px 0; color: #333; }
+        .pagination { text-align: center; margin: 20px 0; }
+        .pagination a { padding: 8px 12px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; margin: 5px; }
+        .pagination a:hover { background: #0056b3; }
+        .settings-section { display: none; margin-top: 15px; }
+        .settings-button { background: #ffffff; color: #1383df; padding: 10px; cursor: pointer; width: 100%; text-align: center; border: none; font-weight: bold; }
+        .settings-button:hover { background: #f0f0f0; }
+    </style>
+</head>
+<body>
+
+    <!-- ✅ Include Sidebar Navigation -->
+    <div class="sidebar">
+        {% include 'includes/sidenav.html' %}
+        
+        <!-- ✅ Sidebar Filters -->
+        <h3>Filters</h3>
+        <form method="GET" action="{{ url_for('home') }}">
+            <label for="product_type">Product Type:</label>
+            <select name="product_type">
+                <option value="">All Types</option>
+                {% for type in product_types %}
+                <option value="{{ type }}" {% if product_type == type %}selected{% endif %}>{{ type }}</option>
+                {% endfor %}
+            </select>
+
+            <label for="vendor">Vendor:</label>
+            <select name="vendor">
+                <option value="" {% if not vendor %}selected{% endif %}>All Vendors</option>
+                {% for v in vendors %}
+                <option value="{{ v }}" {% if vendor == v %}selected{% endif %}>{{ v }}</option>
+                {% endfor %}
+            </select>
+            
+
+            <label for="collection_name">Collection:</label>
+            <select name="collection_name">
+                <option value="">All Collections</option>
+                {% for collection in collections %}
+                <option value="{{ collection }}" {% if collection_name == collection %}selected{% endif %}>{{ collection }}</option>
+                {% endfor %}
+            </select>
+
+            <label for="sort_by">Sort By:</label>
+            <select name="sort_by">
+                <option value="title" {% if sort_by == 'title' %}selected{% endif %}>Title (A-Z)</option>
+                <option value="price_asc" {% if sort_by == 'price_asc' %}selected{% endif %}>Price (Low to High)</option>
+                <option value="price_desc" {% if sort_by == 'price_desc' %}selected{% endif %}>Price (High to Low)</option>
+            </select>
+
+            <button type="submit">Apply Filters</button>
+        </form>
+
+        <!-- ✅ Settings Toggle Button -->
+        <button class="settings-button" onclick="toggleSettings()">Settings</button>
+
+        <!-- ✅ Settings Section -->
+        <div class="settings-section">
+            <form id="customPromptForm">
+                <label for="custom_prompt"><strong>Custom AI Prompt:</strong></label>
+                <textarea id="custom_prompt" name="custom_prompt" placeholder="Enter your custom AI prompt here..." 
+                    style="width: 92.5%; height: 80px;">{{ session.get('custom_prompt', '') }}</textarea>
+                <button type="button" onclick="saveCustomPrompt()">Save Prompt</button>
+            </form>
+            
+
+            <form method="POST" action="{{ url_for('save_industry') }}">
+                <label for="industry"><strong>Industry:</strong></label>
+                <select name="industry">
+                    <option value="">Select Industry</option>
+                    <option value="automotive" {% if session.get('industry') == 'automotive' %}selected{% endif %}>Automotive</option>
+                    <option value="clothing" {% if session.get('industry') == 'clothing' %}selected{% endif %}>Clothing</option>
+                    <option value="beauty" {% if session.get('industry') == 'beauty' %}selected{% endif %}>Beauty</option>
+                    <option value="electronics" {% if session.get('industry') == 'electronics' %}selected{% endif %}>Electronics</option>
+                </select>
+                <button type="submit">Save Industry</button>
+            </form>
+
+            <!-- ✅ Update Shopify Data Button -->
+            <form method="GET" action="{{ url_for('update_shopify_data') }}">
+                <button type="submit" style="background: red; color: white; font-weight: bold;">
+                    Update Shopify Data
+                </button>
+            </form>
+            
+        </div>
+    </div>
+
+    <script>
+    function toggleSettings() {
+        const settingsSection = document.querySelector('.settings-section');
+        if (settingsSection) {
+            settingsSection.style.display = settingsSection.style.display === 'block' ? 'none' : 'block';
+        } else {
+            console.error("[ERROR] Settings section not found.");
+        }
+    }
+</script>
+
+    <!-- ✅ Main Content -->
+    <div class="content">
+        <h1>Shopify Products</h1>
+
+        <!-- ✅ Product Grid -->
+        <div class="product-grid">
+            {% for product in products %}
+            <div class="product-card">
+                <a href="{{ url_for('product_details', product_id=product.id) }}">
+                    <img src="{{ product.images[0]['src'] }}" alt="{{ product.title }}">
+                    <div class="product-title">{{ product.title }}</div>
+                </a>
+                <p><strong>${{ product.variants[0].price if product.variants else 'N/A' }}</strong></p>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- ✅ Pagination -->
+        <div class="pagination">
+            {% if previous_page_url %}
+                <a href="{{ url_for('home', page_info=previous_page_url, product_type=product_type, vendor=vendor, collection_name=collection_name, sort_by=sort_by) }}">← Previous</a>
+            {% endif %}
+            {% if next_page_url %}
+                <a href="{{ url_for('home', page_info=next_page_url, product_type=product_type, vendor=vendor, collection_name=collection_name, sort_by=sort_by) }}">Next →</a>
+            {% endif %}
+        </div>
+    </div>
+
+</body>
+</html>

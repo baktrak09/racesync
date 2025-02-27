@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ product.title }} - Product Details</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; display: flex; }
+        .container { max-width: 800px; margin: auto; padding: 20px; border: 1px solid #ccc; border-radius: 5px; flex-grow: 1; }
+        .product-title { font-size: 28px; font-weight: bold; }
+        img { max-width: 100%; max-height: 200px; border-radius: 5px; margin: 10px 0; }
+
+        textarea, input { width: 100%; margin: 10px 0; padding: 8px; font-size: 1rem; border-radius: 3px; }
+        .button-group { margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
+        .btn { padding: 10px; border: none; cursor: pointer; border-radius: 3px; font-size: 1rem; }
+        .generate-btn { background-color: #adb1ad; color: black; }
+        .save-btn { background-color: #053257; color: white; }
+
+        .sidebar { width: 250px; padding: 15px; background: #1383df; color: white; height: 100vh; overflow-y: auto; }
+        
+        .view-store-link {
+            display: inline-block; position: absolute; top: 20px; right: 20px;
+            background-color: #1383df; color: white; padding: 8px 12px; border-radius: 5px;
+            text-decoration: none; font-weight: bold; font-size: 14px; z-index: 1000;
+        }
+        .view-store-link:hover { background-color: #0f6bbd; }
+    </style>
+</head>
+<body>
+
+    <!-- ✅ Sidebar -->
+    <div class="sidebar">
+        {% include 'includes/sidenav.html' %}
+    </div>
+
+    <!-- ✅ Product Details -->
+    <div class="container">
+        <a href="https://curvedracing.com/products/{{ product.handle if product.handle else '' }}" target="_blank" class="view-store-link">
+            View on Store →
+        </a>
+
+        <h1 class="product-title">{{ product.title or 'No Title Available' }}</h1>
+
+        {% if product.image_url %}
+            <img src="{{ product.image_url }}" alt="{{ product.alt_text }}">
+        {% else %}
+            <p>No image available</p>
+        {% endif %}
+
+        <h2>Product Details</h2>
+        <p><strong>Vendor:</strong> {{ product.vendor }}</p>
+        <p><strong>Type:</strong> {{ product.productType }}</p>
+        <p><strong>Description:</strong> {{ product.descriptionHtml | safe }}</p>
+
+        <!-- ✅ SEO Editing Section -->
+        <h2>SEO Optimization</h2>
+        
+        <h3>Product Title:</h3>
+        <input type="text" id="title" value="{{ product.title or '' }}">
+        <button class="generate-btn" onclick="generateSEO('title')">Generate</button>
+        <button class="save-btn" onclick="saveSEO('title')">Save</button>
+
+        <h3>Product Description:</h3>
+        <textarea id="description">{{ product.descriptionHtml or '' }}</textarea>
+        <button class="generate-btn" onclick="generateSEO('description')">Generate</button>
+        <button class="save-btn" onclick="saveSEO('description')">Save</button>
+
+        <h3>SEO Title:</h3>
+        <textarea id="seo_title">{{ product.meta_title or '' }}</textarea>
+        <button class="generate-btn" onclick="generateSEO('seo_title')">Generate</button>
+        <button class="save-btn" onclick="saveSEO('seo_title')">Save</button>
+
+        <h3>SEO Description:</h3>
+        <textarea id="seo_description">{{ product.meta_description or '' }}</textarea>
+        <button class="generate-btn" onclick="generateSEO('seo_description')">Generate</button>
+        <button class="save-btn" onclick="saveSEO('seo_description')">Save</button>
+
+        <h3>Alt Text:</h3>
+        <textarea id="alt_text">{{ product.alt_text or '' }}</textarea>
+        <button class="generate-btn" onclick="generateSEO('alt_text')">Generate</button>
+        <button class="save-btn" onclick="saveSEO('alt_text')">Save</button>
+
+        <div class="button-group">
+            <button class="generate-btn" onclick="generateAllSEO()">Generate All</button>
+            <button class="save-btn" onclick="saveAllSEO()">Save All</button>
+        </div>
+
+        <div class="button-group">
+            <a href="{{ url_for('next_product', current_product_id=product.id.split('/')[-1]) }}" class="btn btn-info">Next Product →</a>
+            <a href="{{ url_for('home') }}" class="btn btn-warning">← Back to Product List</a>
+        </div>
+    </div>
+
+    <!-- ✅ JavaScript Fixes -->
+    <script>
+        const productId = "{{ product.id }}".split('/').pop().trim();
+
+        function generateAllSEO() {
+            console.log("[DEBUG] Generating all SEO fields...");
+            generateSEO('title');
+            generateSEO('description');
+            generateSEO('seo_title');
+            generateSEO('seo_description');
+            generateSEO('alt_text');
+        }
+
+        function saveAllSEO() {
+            console.log("[DEBUG] Saving all SEO fields...");
+            saveSEO('title');
+            saveSEO('description');
+            saveSEO('seo_title');
+            saveSEO('seo_description');
+            saveSEO('alt_text');
+        }
+
+        function generateSEO(seoType) {
+            let endpointMap = {
+                "title": "/seo/generate_title/",
+                "description": "/seo/generate_description/",
+                "seo_title": "/seo/generate_seo_title/",
+                "seo_description": "/seo/generate_seo_description/",
+                "alt_text": "/seo/generate_alt_text/"
+            };
+
+            let responseMap = {
+                "title": "product_title",
+                "description": "product_description",
+                "seo_title": "seo_title",
+                "seo_description": "seo_description",
+                "alt_text": "alt_text"
+            };
+
+            let inputField = document.getElementById(seoType);
+            if (!inputField) {
+                console.error(`[ERROR] Element with ID '${seoType}' not found.`);
+                return;
+            }
+
+            let endpoint = endpointMap[seoType] + productId;
+            console.log(`[DEBUG] Fetching from: ${endpoint}`);
+
+            fetch(endpoint, { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    console.log(`[DEBUG] Received response for ${seoType}:`, data);
+
+                    let responseKey = responseMap[seoType]; // Map API key properly
+                    if (data[responseKey]) {
+                        inputField.value = data[responseKey];  // ✅ Now properly setting the field value
+                    } else {
+                        console.warn(`[WARNING] No valid data found for ${seoType}`);
+                    }
+                })
+                .catch(error => console.error(`[ERROR] Fetch failed:`, error));
+        }
+
+
+
+        function saveSEO(seoType) {
+            let endpointMap = {
+                "title": "/seo/save_title/",
+                "description": "/seo/save_description/",
+                "seo_title": "/seo/save_seo_title/",
+                "seo_description": "/seo/save_seo_description/",
+                "alt_text": "/seo/save_alt_text/"
+            };
+
+            let inputField = document.getElementById(seoType);
+            if (!inputField) {
+                console.error(`[ERROR] Element with ID '${seoType}' not found.`);
+                return;
+            }
+
+            let seoValue = inputField.value.trim();
+            if (!seoValue) {
+                alert(`Cannot save empty ${seoType}!`);
+                return;
+            }
+
+            let endpoint = endpointMap[seoType] + productId;
+            console.log(`[DEBUG] Sending request to ${endpoint} with content:`, seoValue);
+
+            fetch(endpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ content: seoValue })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert(`Failed to save ${seoType}: ${data.error}`);
+                } else {
+                    alert(`${seoType} saved successfully!`);
+                }
+            })
+            .catch(error => console.error(`[ERROR] Failed to save ${seoType}:`, error));
+        }
+    </script>
+
+</body>
+</html>

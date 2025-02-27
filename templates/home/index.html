@@ -1,0 +1,114 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %} Dashboard {% endblock title %}
+
+<!-- Specific CSS goes HERE -->
+{% block stylesheets %}{% endblock stylesheets %}
+
+{% block content %}
+
+<!-- Header -->
+<div class="header bg-primary pb-6">
+  <div class="container-fluid">
+    <div class="header-body"><!DOCTYPE html>
+      <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <title>Test Button</title>
+      </head>
+      <body>
+          <button onclick="alert('Button clicked!');">Refresh SKUs</button>
+      </body>
+      </html>
+      
+      <!-- Additional rows and columns can be added here for more header content -->
+    </div>
+  </div>
+</div>
+
+<!-- Page content -->
+<div class="container-fluid mt--6">
+  <!-- Shopify Location ID Display -->
+  <div class="row">
+    <div class="col-xl-12">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="h3 mb-0">Shopify Location ID</h5>
+        </div>
+        <div class="card-body">
+          <p id="locationId">Location ID: {{ location_id }}</p>
+          <button onclick="refreshDashboardData()" class="btn btn-primary">Refresh Data</button>
+          <button onclick="refreshSKUs()" class="btn btn-primary">Refresh SKUs</button>
+        </div>       
+      </div>
+    </div>
+  </div>
+
+  <!-- Shopify SKUs Display -->
+<div class="row">
+  <div class="col-xl-12">
+    <div class="card">
+      <div class="card-header">
+        <h5 class="h3 mb-0">Shopify SKUs</h5>
+      </div>
+      <div class="card-body">
+        <ul id="skuList">
+        {% if shopify_skus %}
+          {% for sku, details in shopify_skus.items() %}
+            <li>{{ sku }}: {{ details }}</li>
+          {% endfor %}
+        {% endif %}
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+  <!-- Footer -->
+  {% include "includes/footer.html" %}
+
+</div>
+
+{% endblock content %}
+
+<!-- Specific JS goes HERE -->
+{% block javascripts %}
+<script src="/static/assets/vendor/chart.js/dist/Chart.min.js"></script>
+<script src="/static/assets/vendor/chart.js/dist/Chart.extension.js"></script>
+<script>
+function refreshDashboardData() {
+  fetch('/api/dashboard-data')
+    .then(response => response.json())
+    .then(data => {
+      document.getElementById('locationId').textContent = 'Location ID: ' + data.location_id;
+      const skuList = document.getElementById('skuList');
+      skuList.innerHTML = '';
+      Object.entries(data.shopify_skus).forEach(([sku, details]) => {
+        const item = document.createElement('li');
+        item.textContent = `${sku}: ${details}`;
+        skuList.appendChild(item);
+      });
+    })
+    .catch(error => console.error('Failed to fetch dashboard data:', error));
+}
+
+// Here's the additional function for refreshing SKUs
+function refreshSKUs() {
+    fetch('/api/shopify-skus')
+        .then(response => response.json())
+        .then(data => {
+            const skuList = document.getElementById('skuList');
+            skuList.innerHTML = '';  // Clear previous entries
+            Object.entries(data).forEach(([sku, details]) => {
+                const item = document.createElement('li');
+                item.textContent = `${sku}: ${details.product_id}, ${details.variant_id}`;
+                skuList.appendChild(item);
+            });
+        })
+        .catch(error => console.error('Error fetching SKUs:', error));
+}
+
+
+</script>
+{% endblock javascripts %}

@@ -1,0 +1,117 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %} Dashboard {% endblock title %}
+
+<!-- Specific CSS goes HERE -->
+{% block stylesheets %}{% endblock stylesheets %}
+
+{% block content %}
+
+<!-- Header -->
+<div class="header bg-primary pb-6">
+  <div class="container-fluid">
+    <div class="header-body">
+      <!-- Additional rows and columns can be added here for more header content -->
+    </div>
+  </div>
+</div>
+
+<!-- Page content -->
+<div class="container-fluid mt--6">
+  <!-- Shopify Location ID Display -->
+  <div class="row">
+    <div class="col-xl-12">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="h3 mb-0">Shopify Location ID</h5>
+        </div>
+        <div class="card-body">
+          <p id="locationId">Location ID: {{ location_id }}</p>
+          <button id="process-inventory-update" class="btn btn-primary">Update Inventory and Pricing</button>
+          <span id="update-status"></span>
+          <p id="matchedSkus">Matched SKUs: 0</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  
+
+  <!-- Footer -->
+  {% include "includes/footer.html" %}
+
+</div>
+
+{% endblock content %}
+
+<!-- Specific JS goes HERE -->
+{% block javascripts %}
+<script src="/static/assets/vendor/chart.js/dist/Chart.min.js"></script>
+<script src="/static/assets/vendor/chart.js/dist/Chart.extension.js"></script>
+<script>
+function refreshDashboardData() {
+  fetch('/api/dashboard-data')
+    .then(response => response.json())
+    .then(data => {
+      document.getElementById('locationId').textContent = 'Location ID: ' + data.location_id;
+      const skuList = document.getElementById('skuList');
+      skuList.innerHTML = '';
+      Object.entries(data.shopify_skus).forEach(([sku, details]) => {
+        const item = document.createElement('li');
+        item.textContent = `${sku}: ${details}`;
+        skuList.appendChild(item);
+      });
+    })
+    .catch(error => console.error('Failed to fetch dashboard data:', error));
+}
+
+// Here's the additional function for refreshing SKUs
+function refreshSKUs() {
+    fetch('/api/shopify-skus')
+        .then(response => response.json())
+        .then(data => {
+            const skuList = document.getElementById('skuList');
+            skuList.innerHTML = '';  // Clear previous entries
+            Object.entries(data).forEach(([sku, details]) => {
+                const item = document.createElement('li');
+                item.textContent = `${sku}: ${details.product_id}, ${details.variant_id}`;
+                skuList.appendChild(item);
+            });
+        })
+        .catch(error => console.error('Error fetching SKUs:', error));
+}
+
+document.getElementById('process-inventory-update').addEventListener('click', function() {
+    const updateButton = document.getElementById('process-inventory-update');
+    const statusText = document.getElementById('update-status');
+    const matchedSkus = document.getElementById('matchedSkus');
+
+    // Update button text and display status
+    updateButton.textContent = 'Updating...';
+    statusText.textContent = 'Process has started... This could take several hours!';
+
+    fetch('/inventory/trigger_update', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === "success") {
+            statusText.textContent = 'Inventory and pricing updated successfully!';
+            matchedSkus.textContent = `Matched SKUs: ${data.matched_count} / ${data.total_skus}`;
+            updateButton.textContent = 'Update Inventory and Pricing';
+        } else {
+            statusText.textContent = 'Failed to update inventory and pricing: ' + data.message;
+            updateButton.textContent = 'Update Inventory and Pricing';
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        statusText.textContent = 'An error occurred while updating inventory and pricing.';
+        updateButton.textContent = 'Update Inventory and Pricing';
+    });
+});
+</script>
+{% endblock javascripts %}
