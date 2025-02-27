@@ -61,7 +61,6 @@ psycopg2-binary==2.9.10
 pydantic==2.10.4
 pydantic_core==2.27.2
 Pygments==2.19.1
-pypiwin32==223
 PySide6==6.8.2.1
 PySide6_Addons==6.8.2.1
 PySide6_Essentials==6.8.2.1
@@ -70,7 +69,6 @@ python-decouple==3.4
 python-dotenv==1.0.1
 python-Levenshtein==0.26.1
 pytz==2024.2
-pywin32==308
 PyYAML==6.0.2
 RapidFuzz==3.12.1
 redis==5.2.1
