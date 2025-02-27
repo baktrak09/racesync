@@ -1,0 +1,41 @@
+# Exported from Render on 2025-02-27T02:58:41Z
+services:
+- type: web
+  name: racesync
+  runtime: python
+  repo: https://github.com/baktrak09/racesync
+  branch: main
+  plan: free
+  envVars:
+  - key: OPENAI_API_KEY
+    sync: false
+  - key: SHOPIFY_STORE_URL
+    sync: false
+  - key: SHOPIFY_API_SECRET
+    sync: false
+  - key: SHOPIFY_API_KEY
+    sync: false
+  - key: FLASK_SECRET_KEY
+    sync: false
+  - key: VITE_API_URL
+    sync: false
+  - key: SHOPIFY_ACCESS_TOKEN
+    sync: false
+  - key: SHOPIFY_DOMAIN
+    sync: false
+  - key: FTP_PASS
+    sync: false
+  - key: FTP_USER
+    sync: false
+  - key: FTP_HOST
+    sync: false
+  - key: API_VERSION
+    sync: false
+  - key: ACCESS_TOKEN
+    sync: false
+  - key: SHOP_URL
+    sync: false
+  region: ohio
+  buildCommand: pip install -r requirements.txt
+  startCommand: gunicorn -w 4 -b 0.0.0.0:10000 app:app
+version: "1"
