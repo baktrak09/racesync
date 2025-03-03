@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Form</title>
+</head>
+<body>
+    <form action="{{ url_for('test_post') }}" method="post">
+        <label for="test_input">Test Input:</label>
+        <input type="text" id="test_input" name="test_input">
+        <button type="submit">Submit</button>
+    </form>
+</body>
+</html>

@@ -1,7 +1,7 @@
-<nav class="sidenav navbar navbar-vertical  fixed-left  navbar-expand-xs navbar-light bg-white" id="sidenav-main">
+<nav class="sidenav navbar navbar-vertical fixed-left navbar-expand-xs navbar-light bg-white" id="sidenav-main">
   <div class="scrollbar-inner">
     <!-- Brand -->
-    <div class="sidenav-header  align-items-center">
+    <div class="sidenav-header align-items-center">
       <a class="navbar-brand" href="/">
         <img src="/static/assets/img/brand/curved.png" class="navbar-brand-img" alt="Curved Racing Logo">
       </a>
@@ -16,23 +16,48 @@
               <i class="ni ni-tv-2 text-primary"></i>
               <span class="nav-link-text">Home</span>
             </a>
-          </li>          
+          </li>
           <li class="nav-item">
             <a class="nav-link" href="/seo/">
               <i class="ni ni-key-25 text-info"></i>
               <span class="nav-link-text">SEO Dashboard</span>
             </a>
-          </li>     
-
+          </li>
+          
           {% if session.get('user_id') %}
+            <!-- Debug Session State -->
+            <li class="nav-item">
+              <a class="nav-link">
+                <i class="ni ni-check-bold text-success"></i>
+                <span class="nav-link-text">User ID: {{ session['user_id'] }}</span>
+              </a>
+            </li>
+
+            <!-- Show System Admin only for admins -->
+            {% if session.get('role') == 'admin' %}
+            <li class="nav-item">
+              <a class="nav-link" href="/admin/system">
+                <i class="ni ni-settings-gear-65 text-warning"></i>
+                <span class="nav-link-text">System Admin</span>
+              </a>
+            </li>
+            {% endif %}
+
             <!-- If user is logged in, show Logout -->
             <li class="nav-item">
               <a class="nav-link" href="{{ url_for('logout') }}">
                 <i class="ni ni-user-run text-red"></i>
                 <span class="nav-link-text">Logout</span>
               </a>
-            </li>  
+            </li>
           {% else %}
+            <!-- Debug Session State -->
+            <li class="nav-item">
+              <a class="nav-link">
+                <i class="ni ni-check-bold text-warning"></i>
+                <span class="nav-link-text">User not logged in</span>
+              </a>
+            </li>
             <!-- If user is NOT logged in, show Login & Register -->
             <li class="nav-item">
               <a class="nav-link" href="{{ url_for('login') }}">
@@ -46,8 +71,7 @@
                 <span class="nav-link-text">Register</span>
               </a>
             </li>
-          {% endif %}  
-          
+          {% endif %}
         </ul>
         <!-- Divider -->
         <hr class="my-3">
@@ -56,7 +80,7 @@
           <span class="docs-normal">Resources</span>
         </h6>
         <!-- Navigation -->
-        <ul class="navbar-nav mb-md-3">     
+        <ul class="navbar-nav mb-md-3">
           <!-- Add additional links if needed -->
         </ul>
       </div>

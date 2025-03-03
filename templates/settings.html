@@ -1,0 +1,16 @@
+<h2>API & FTP Settings</h2>
+<form action="{{ url_for('settings') }}" method="POST">
+    <label>OpenAI API Key:</label>
+    <input type="text" name="openai_api_key" placeholder="Enter OpenAI API Key" required>
+
+    <label>FTP Host:</label>
+    <input type="text" name="ftp_host" placeholder="FTP Host" required>
+
+    <label>FTP Username:</label>
+    <input type="text" name="ftp_user" placeholder="FTP Username" required>
+
+    <label>FTP Password:</label>
+    <input type="password" name="ftp_pass" placeholder="FTP Password" required>
+
+    <button type="submit">Save Settings</button>
+</form>
