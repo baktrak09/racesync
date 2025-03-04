@@ -23,10 +23,41 @@ from flask_migrate import Migrate
 from datetime import timedelta
 from sqlalchemy.exc import SQLAlchemyError
 from flask_login import login_required  # Add this import
-
+import psycopg2
+from psycopg2.extras import DictCursor
 
 # Import db from your models
 from models import db, User, Setting
+DATABASE_URL = os.getenv("DATABASE_URL")  # Get from Render Env Variables
+
+@app.route("/init_db")
+def init_db():
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        cur = conn.cursor()
+        
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS shopify_stores (
+                id SERIAL PRIMARY KEY,
+                store_url TEXT UNIQUE NOT NULL,
+                access_token TEXT NOT NULL,
+                api_key TEXT NOT NULL,
+                api_secret TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        return "Database initialized!", 200
+
+    except Exception as e:
+        return f"Error: {e}", 500
+
+def get_db_connection():
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=DictCursor)
+    return conn
 
 # Flask App Initialization
 app = Flask(__name__)
