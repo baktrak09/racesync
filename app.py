@@ -52,6 +52,9 @@ def get_db_connection():
     conn = psycopg2.connect(DATABASE_URL, cursor_factory=DictCursor)
     return conn
 
+db = SQLAlchemy()
+
+
 # Flask App Initialization
 app = Flask(__name__)
 
