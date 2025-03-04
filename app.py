@@ -44,6 +44,31 @@ db = SQLAlchemy()
 # Flask App Initialization
 app = Flask(__name__)
 
+# OAuth Configuration
+SHOPIFY_CLIENT_ID = os.getenv("SHOPIFY_CLIENT_ID")  # Client ID from Shopify
+SHOPIFY_CLIENT_SECRET = os.getenv("SHOPIFY_CLIENT_SECRET")  # Client Secret
+SHOPIFY_REDIRECT_URI = "https://racesync.onrender.com/oauth/callback"
+
+# Shopify API Scopes (Modify if needed)
+SHOPIFY_SCOPES = "read_products,write_products,read_orders"
+
+# Initialize OAuth
+oauth = OAuth(app)
+shopify = oauth.remote_app(
+    'shopify',
+    consumer_key=SHOPIFY_CLIENT_ID,
+    consumer_secret=SHOPIFY_CLIENT_SECRET,
+    request_token_params={
+        'scope': SHOPIFY_SCOPES,
+    },
+    base_url="https://{shop}.myshopify.com/admin/api/2023-01/",
+    request_token_url=None,
+    access_token_method="POST",
+    access_token_url="https://{shop}.myshopify.com/admin/oauth/access_token",
+    authorize_url="https://{shop}.myshopify.com/admin/oauth/authorize"
+)
+
+
 # Load Environment Variables
 load_dotenv()
 
@@ -150,6 +175,39 @@ def main_screen():
 with app.app_context():
     db.create_all()
 
+@app.route("/oauth/start")
+def oauth_start():
+    shop = request.args.get("shop")
+    if not shop:
+        flash("Missing Shopify shop parameter", "danger")
+        return redirect(url_for("login"))
+
+    # Redirect to Shopify's OAuth screen
+    return shopify.authorize(callback=SHOPIFY_REDIRECT_URI, state=shop)
+
+@app.route("/oauth/callback")
+def oauth_callback():
+    resp = shopify.authorized_response()
+    if resp is None or "access_token" not in resp:
+        flash("Authorization failed.", "danger")
+        return redirect(url_for("login"))
+
+    # Extract access token & shop URL
+    access_token = resp["access_token"]
+    shop = request.args.get("state")  # Shopify sends the shop name as 'state'
+
+    # Store the token in the database (Modify as needed)
+    user = User.query.filter_by(shopify_domain=shop).first()
+    if user:
+        user.access_token = access_token
+    else:
+        user = User(shopify_domain=shop, access_token=access_token)
+        db.session.add(user)
+
+    db.session.commit()
+
+    flash("Shopify OAuth successful!", "success")
+    return redirect(url_for("index"))
 
 
 def admin_required(f):
