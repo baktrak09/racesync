@@ -93,7 +93,7 @@ login_manager.login_view = "login"
 Session(app)
 
 
-from models import db, User, Setting
+from models import User, Setting
 
 
 # User loader for Flask-Login
