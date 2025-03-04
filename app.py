@@ -117,8 +117,9 @@ def register():
         flash("Account created successfully! Please log in.", "success")
         return redirect(url_for("login"))
 
-    # ✅ Fix: Pass an empty `form` object to avoid Jinja errors
-    return render_template("register.html", form={})
+    # ✅ Pass an empty `form` variable to prevent errors in extended templates
+    return render_template("home/register.html", form={})
+
 
 
 
