@@ -30,20 +30,6 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import DataRequired, Email, EqualTo
 
-
-
-
-
-
-
-
-
-
-
-
-
-# Import db from your models
-from models import db, User, Setting
 DATABASE_URL = os.getenv("DATABASE_URL")  # Get from Render Env Variables
 
 
