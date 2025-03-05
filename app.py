@@ -183,13 +183,15 @@ with app.app_context():
     db.create_all()
 
 @app.route("/oauth/start")
+@login_required
 def oauth_start():
-    shop = request.args.get("shop")
-    if not shop:
-        flash("Missing Shopify shop parameter", "danger")
-        return redirect(url_for("login"))
+    user = User.query.get(current_user.id)
 
-    # Construct Shopify authorization URL
+    if not user or not user.shopify_domain:
+        flash("You must enter your Shopify store URL in your profile!", "danger")
+        return redirect(url_for("profile"))
+
+    shop = user.shopify_domain.strip()
     authorization_url = (
         f"https://{shop}/admin/oauth/authorize?"
         f"client_id={SHOPIFY_CLIENT_ID}&"
@@ -198,6 +200,7 @@ def oauth_start():
     )
 
     return redirect(authorization_url)
+
 
 
 @app.route("/oauth/callback")
@@ -366,31 +369,36 @@ def reset_password():
 @login_required
 def profile():
     print("[DEBUG] Profile route hit!")
+
     if request.method == 'POST':
         print("[DEBUG] POST request received")
-        
+
+        # Collect Shopify Store Domain
+        shopify_domain = request.form.get('shopify_domain').strip()
         openai_api_key = request.form.get('openai_api_key')
         ftp_host = request.form.get('ftp_host')
         ftp_user = request.form.get('ftp_user')
         ftp_pass = request.form.get('ftp_pass')
 
         # Debugging Statements to Verify Form Data
+        print(f"[DEBUG] Received Shopify Store: {shopify_domain}")
         print(f"[DEBUG] Received OpenAI API Key: {openai_api_key}")
         print(f"[DEBUG] Received FTP Host: {ftp_host}")
         print(f"[DEBUG] Received FTP User: {ftp_user}")
         print(f"[DEBUG] Received FTP Pass: {ftp_pass}")
 
         # Update user settings
+        current_user.shopify_domain = shopify_domain  # ✅ Add Shopify store to user profile
         current_user.openai_api_key = openai_api_key
         current_user.ftp_host = ftp_host
         current_user.ftp_user = ftp_user
         current_user.ftp_pass = ftp_pass
 
-        # Debugging Statements Before Committing to Database
+        # Debugging Before Committing to Database
         print("[DEBUG] Updating user settings in database")
 
         try:
-            db.session.add(current_user) # Explicitly add current user
+            db.session.add(current_user)  # Explicitly add current user
             db.session.commit()
             print("[DEBUG] Settings updated in database")
         except Exception as e:
@@ -404,12 +412,14 @@ def profile():
 
     # Retrieve stored values
     try:
+        shopify_domain = current_user.shopify_domain or ""  # ✅ Retrieve Shopify domain
         openai_api_key = current_user.openai_api_key
         ftp_host = current_user.ftp_host
         ftp_user = current_user.ftp_user
         ftp_pass = current_user.ftp_pass
 
         # Debugging Statements to Check Retrieved Values
+        print(f"[DEBUG] Retrieved Shopify Store: {shopify_domain}")
         print(f"[DEBUG] Retrieved OpenAI API Key: {openai_api_key}")
         print(f"[DEBUG] Retrieved FTP Host: {ftp_host}")
         print(f"[DEBUG] Retrieved FTP User: {ftp_user}")
@@ -419,6 +429,7 @@ def profile():
         flash("Failed to retrieve settings. Please try again.", "danger")
         return redirect(url_for('profile'))
 
+    # Check for profile template
     template_path = os.path.join(app.template_folder, 'profile.html')
     print(f"[DEBUG] Template path: {template_path}")
     if os.path.exists(template_path):
@@ -428,10 +439,11 @@ def profile():
 
     try:
         print("[DEBUG] Attempting to render profile.html")
-        return render_template('profile.html', openai_api_key=openai_api_key, ftp_host=ftp_host, ftp_user=ftp_user, ftp_pass=ftp_pass)
+        return render_template('profile.html', shopify_domain=shopify_domain, openai_api_key=openai_api_key, ftp_host=ftp_host, ftp_user=ftp_user, ftp_pass=ftp_pass)
     except Exception as e:
         print(f"[DEBUG] Exception occurred while rendering template: {e}")
         return str(e), 500
+
 
 
 

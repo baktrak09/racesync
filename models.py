@@ -19,6 +19,8 @@ class User(db.Model, UserMixin):
     signup_date = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime, nullable=True)
     must_reset_password = db.Column(db.Boolean, default=False)
+    shopify_domain = db.Column(db.String(255), unique=True, nullable=True)
+
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
