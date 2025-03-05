@@ -22,95 +22,67 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from flask_migrate import Migrate
 from datetime import timedelta
 from sqlalchemy.exc import SQLAlchemyError
-from flask_login import login_required  # Add this import
+from flask_login import login_required
 import psycopg2
 from psycopg2.extras import DictCursor
-from flask import render_template, request, redirect, url_for, flash
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import DataRequired, Email, EqualTo
 from authlib.integrations.flask_client import OAuth
 
+# ✅ Load Environment Variables (BEFORE using os.getenv())
+load_dotenv()
 
+# ✅ Securely Fetch Environment Variables
+SHOPIFY_API_KEY = os.getenv("SHOPIFY_API_KEY")
+SHOPIFY_SECRET = os.getenv("SHOPIFY_SECRET")
+SHOPIFY_REDIRECT_URI = "https://racesync.onrender.com/oauth/callback"
+SHOPIFY_SCOPES = "read_products,write_products,read_orders"
+DATABASE_URL = os.getenv("DATABASE_URL")  # Render's PostgreSQL URL
 
+# ✅ Check if API Keys Are Missing (Useful for Debugging)
+if not SHOPIFY_API_KEY or not SHOPIFY_SECRET:
+    raise ValueError("Error: Shopify API credentials are missing! Check your Render environment variables.")
 
-DATABASE_URL = os.getenv("DATABASE_URL")  # Get from Render Env Variables
-
-
-
+# ✅ Database Connection Function
 def get_db_connection():
     conn = psycopg2.connect(DATABASE_URL, cursor_factory=DictCursor)
     return conn
 
-db = SQLAlchemy()
-
-
-# Flask App Initialization
+# ✅ Flask App Initialization
 app = Flask(__name__)
 
-# OAuth Configuration
-SHOPIFY_CLIENT_ID = os.getenv("SHOPIFY_CLIENT_ID")  # Client ID from Shopify
-SHOPIFY_CLIENT_SECRET = os.getenv("SHOPIFY_CLIENT_SECRET")  # Client Secret
-SHOPIFY_REDIRECT_URI = "https://racesync.onrender.com/oauth/callback"
+# ✅ Use Render's PostgreSQL in Production, SQLite for Local Testing
+if DATABASE_URL:
+    app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL  # Render (Production)
+else:
+    basedir = os.path.abspath(os.path.dirname(__file__))
+    DATABASE_PATH = os.path.join(basedir, "instance", "app.db")
+    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DATABASE_PATH}"  # Local Testing
 
-# Shopify API Scopes (Modify if needed)
-SHOPIFY_SCOPES = "read_products,write_products,read_orders"
-
-# Initialize OAuth
-SHOPIFY_API_KEY = "af6a88e6242dda0195b33475f4242523"
-SHOPIFY_SECRET = "bf358dfc1eeefd7e00f62898b4a7f127"
-SHOPIFY_REDIRECT_URI = "https://racesync.onrender.com/oauth/callback"
-
-oauth = OAuth(app)
-
-shopify = oauth.register(
-    name="shopify",
-    client_id=SHOPIFY_API_KEY,
-    client_secret=SHOPIFY_SECRET,
-    authorize_url="https://{shop}.myshopify.com/admin/oauth/authorize",
-    authorize_params={"scope": "read_products, write_products"},
-    access_token_url="https://{shop}.myshopify.com/admin/oauth/access_token",
-    client_kwargs={"token_endpoint_auth_method": "client_secret_post"},
-)
-
-
-
-
-# Load Environment Variables
-load_dotenv()
-
-
-SHOPIFY_STORE_URL = os.getenv("SHOPIFY_STORE_URL", "").strip()
-SHOPIFY_ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN", "").strip()
-API_VERSION = os.getenv("API_VERSION", "2024-01")  # Default to the latest Shopify API version
-SHOP_URL = os.getenv("SHOP_URL")
-ACCESS_TOKEN = os.getenv("ACCESS_TOKEN")
-SHOPIFY_DOMAIN = os.getenv("SHOPIFY_DOMAIN")
-CSV_FILENAME = "Motorstate1.csv"
-
-# Set Configurations
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "your_secret_key")
-basedir = os.path.abspath(os.path.dirname(__file__))
-INSTANCE_DIR = os.path.join(basedir, "instance")
-os.makedirs(INSTANCE_DIR, exist_ok=True)
-DATABASE_PATH = os.path.join(INSTANCE_DIR, "app.db")
-app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DATABASE_PATH}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_TYPE"] = "filesystem"
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=20)
 app.config["SESSION_FILE_DIR"] = os.path.join(basedir, "flask_session")
 app.config["SESSION_FILE_THRESHOLD"] = 500
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "your_secret_key")
 
-# Initialize Extensions
-db.init_app(app)  # Initialize with app
+# ✅ Initialize Extensions
+db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 bcrypt = Bcrypt(app)
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 Session(app)
 
+# ✅ Shopify OAuth Setup (DO NOT USE `oauth.register()`)
+oauth = OAuth(app)
 
+# ✅ Remove `oauth.register()` → Shopify needs dynamic URLs
+# Instead, handle OAuth manually in the routes
+
+# ✅ Import Models
 from models import User, Setting
 
 
@@ -185,21 +157,30 @@ with app.app_context():
 @app.route("/oauth/start")
 @login_required
 def oauth_start():
+    # ✅ Ensure the user is authenticated before proceeding
+    if not current_user.is_authenticated:
+        flash("You must be logged in to connect your Shopify store!", "danger")
+        return redirect(url_for("login"))
+
     user = User.query.get(current_user.id)
 
+    # ✅ Check if the user has a Shopify store domain
     if not user or not user.shopify_domain:
         flash("You must enter your Shopify store URL in your profile!", "danger")
         return redirect(url_for("profile"))
 
     shop = user.shopify_domain.strip()
+
+    # ✅ Use the correct variable names
     authorization_url = (
         f"https://{shop}/admin/oauth/authorize?"
-        f"client_id={SHOPIFY_CLIENT_ID}&"
+        f"client_id={SHOPIFY_API_KEY}&"
         f"scope={SHOPIFY_SCOPES}&"
         f"redirect_uri={SHOPIFY_REDIRECT_URI}"
     )
 
     return redirect(authorization_url)
+
 
 
 
@@ -210,13 +191,14 @@ def oauth_callback():
 
     if not shop or not code:
         flash("OAuth failed! Missing parameters.", "danger")
-        return redirect(url_for("login"))
+        return redirect(url_for("index"))  # Redirect to a safer page
 
+    # Exchange authorization code for access token
     token_url = f"https://{shop}/admin/oauth/access_token"
     
     response = requests.post(token_url, json={
-        "client_id": SHOPIFY_CLIENT_ID,
-        "client_secret": SHOPIFY_CLIENT_SECRET,
+        "client_id": SHOPIFY_API_KEY,  # ✅ Fixed variable names
+        "client_secret": SHOPIFY_SECRET,
         "code": code
     })
 
@@ -224,7 +206,11 @@ def oauth_callback():
         token_data = response.json()
         access_token = token_data.get("access_token")
 
-        # Store token in database
+        if not access_token:
+            flash("OAuth failed! No access token received.", "danger")
+            return redirect(url_for("index"))
+
+        # ✅ Store token in the database
         user = User.query.filter_by(shopify_domain=shop).first()
         if user:
             user.access_token = access_token
@@ -236,10 +222,27 @@ def oauth_callback():
 
         flash("Shopify OAuth successful!", "success")
         return redirect(url_for("index"))
+    
     else:
         flash(f"OAuth failed! Error: {response.text}", "danger")
-        return redirect(url_for("login"))
+        return redirect(url_for("index"))  # ✅ Redirect to index instead of login
 
+@app.route("/install")
+def install():
+    shop = request.args.get("shop")  # Get Shopify store domain
+
+    if not shop:
+        flash("Missing 'shop' parameter!", "danger")
+        return redirect(url_for("index"))
+
+    install_url = (
+        f"https://{shop}/admin/oauth/authorize?"
+        f"client_id={SHOPIFY_API_KEY}&"
+        f"scope={SHOPIFY_SCOPES}&"
+        f"redirect_uri={SHOPIFY_REDIRECT_URI}"
+    )
+
+    return redirect(install_url)
 
 
 def admin_required(f):
