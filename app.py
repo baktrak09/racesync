@@ -58,19 +58,18 @@ SHOPIFY_SCOPES = "read_products,write_products,read_orders"
 
 # Initialize OAuth
 oauth = OAuth(app)
-shopify = oauth.remote_app(
-    'shopify',
-    consumer_key=SHOPIFY_CLIENT_ID,
-    consumer_secret=SHOPIFY_CLIENT_SECRET,
-    request_token_params={
-        'scope': SHOPIFY_SCOPES,
-    },
-    base_url="https://{shop}.myshopify.com/admin/api/2023-01/",
-    request_token_url=None,
+
+shopify = oauth.register(
+    name="shopify",
+    client_id=SHOPIFY_CLIENT_ID,
+    client_secret=SHOPIFY_CLIENT_SECRET,
+    authorize_url="https://{shop}/admin/oauth/authorize",
+    authorize_params={"scope": SHOPIFY_SCOPES},
+    access_token_url="https://{shop}/admin/oauth/access_token",
     access_token_method="POST",
-    access_token_url="https://{shop}.myshopify.com/admin/oauth/access_token",
-    authorize_url="https://{shop}.myshopify.com/admin/oauth/authorize"
+    client_kwargs={"scope": SHOPIFY_SCOPES},
 )
+
 
 
 # Load Environment Variables
