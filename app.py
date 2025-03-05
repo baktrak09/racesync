@@ -29,7 +29,8 @@ from flask import render_template, request, redirect, url_for, flash
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import DataRequired, Email, EqualTo
-from flask_oauthlib.client import OAuth
+from authlib.integrations.flask_client import OAuth
+
 
 
 
