@@ -45,7 +45,8 @@ def get_shopify_credentials():
     return credentials
 
 # ✅ Fetch Shopify credentials from database
-shopify_credentials = get_shopify_credentials()
+with app.app_context():
+    shopify_credentials = get_shopify_credentials()
 SHOPIFY_API_KEY = shopify_credentials["SHOPIFY_API_KEY"]
 SHOPIFY_SECRET = shopify_credentials["SHOPIFY_SECRET"]
 SHOPIFY_REDIRECT_URI = shopify_credentials.get("SHOPIFY_REDIRECT_URI", "https://racesync.onrender.com/oauth/callback")
