@@ -6,7 +6,6 @@ import time
 import requests
 import urllib.parse
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
-from dotenv import load_dotenv
 from flask_session import Session
 import cProfile
 from ftplib import FTP
@@ -30,15 +29,91 @@ from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import DataRequired, Email, EqualTo
 from authlib.integrations.flask_client import OAuth
 
-# ✅ Load Environment Variables (BEFORE using os.getenv())
-load_dotenv()
 
-# ✅ Securely Fetch Environment Variables
-SHOPIFY_API_KEY = os.getenv("SHOPIFY_API_KEY")
-SHOPIFY_SECRET = os.getenv("SHOPIFY_SECRET")
-SHOPIFY_REDIRECT_URI = "https://racesync.onrender.com/oauth/callback"
-SHOPIFY_SCOPES = "read_products,write_products,read_orders"
-DATABASE_URL = os.getenv("DATABASE_URL")  # Render's PostgreSQL URL
+
+def get_shopify_credentials():
+    """Fetch Shopify API credentials from the database."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT key, value FROM settings WHERE key IN ('SHOPIFY_API_KEY', 'SHOPIFY_SECRET', 'SHOPIFY_REDIRECT_URI', 'SHOPIFY_SCOPES')")
+    credentials = {row["key"]: row["value"] for row in cursor.fetchall()}
+    
+    conn.close()
+    return credentials
+
+# ✅ Fetch Shopify credentials from database
+shopify_credentials = get_shopify_credentials()
+
+if not shopify_credentials or any(k not in shopify_credentials for k in ["SHOPIFY_API_KEY", "SHOPIFY_SECRET"]):
+    raise ValueError("Error: Shopify API credentials are missing! Check your database.")
+
+SHOPIFY_API_KEY = shopify_credentials["SHOPIFY_API_KEY"]
+SHOPIFY_SECRET = shopify_credentials["SHOPIFY_SECRET"]
+SHOPIFY_REDIRECT_URI = shopify_credentials.get("SHOPIFY_REDIRECT_URI", "https://racesync.onrender.com/oauth/callback")
+SHOPIFY_SCOPES = shopify_credentials.get("SHOPIFY_SCOPES", "read_products,write_products,read_orders")
+
+def get_database_url():
+    """Fetch the database URL from the settings table."""
+    conn = psycopg2.connect(os.getenv("DATABASE_URL"), cursor_factory=DictCursor)  # Temporary connection
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT value FROM settings WHERE key = 'DATABASE_URL'")
+    db_url = cursor.fetchone()
+    
+    conn.close()
+    
+    return db_url["value"] if db_url else None
+
+# ✅ Load database URL
+DATABASE_URL = get_database_url()
+
+if not DATABASE_URL:
+    raise ValueError("Error: Database URL is missing! Check your database settings.")
+
+# ✅ Use Render’s PostgreSQL in Production, SQLite for Local Testing
+if DATABASE_URL:
+    app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL  # Render (Production)
+else:
+    basedir = os.path.abspath(os.path.dirname(__file__))
+    DATABASE_PATH = os.path.join(basedir, "instance", "app.db")
+    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DATABASE_PATH}"  # Local Testing
+
+
+
+def get_shopify_access_token():
+    """Fetch Shopify Access Token from the database."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT value FROM settings WHERE key = 'SHOPIFY_ACCESS_TOKEN'")
+    token = cursor.fetchone()
+
+    conn.close()
+    return token["value"] if token else None
+
+SHOPIFY_ACCESS_TOKEN = get_shopify_access_token()
+
+if not SHOPIFY_ACCESS_TOKEN:
+    raise ValueError("Error: Shopify Access Token is missing! Check your database settings.")
+
+# ✅ Updated function for fetching Shopify Products
+def fetch_shopify_products():
+    """Fetch products from Shopify using credentials from the database."""
+    url = f"{SHOPIFY_STORE_URL}/admin/api/{API_VERSION}/products.json?limit=50"
+    headers = {
+        "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
+        "Content-Type": "application/json"
+    }
+    
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        print(f"[ERROR] Shopify API Request Failed: {response.text}")
+        return None
+
+
 
 # ✅ Check if API Keys Are Missing (Useful for Debugging)
 if not SHOPIFY_API_KEY or not SHOPIFY_SECRET:
