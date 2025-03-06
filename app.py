@@ -80,6 +80,16 @@ def get_shopify_credentials():
 
     return credentials
 
+# ✅ Fetch Shopify Access Token from Database
+def get_shopify_access_token(shopify_domain):
+    """Fetch Shopify Access Token for a specific shop from the User table."""
+    with app.app_context():
+        user = User.query.filter_by(shopify_domain=shopify_domain).first()
+        if not user:
+            raise ValueError(f"Error: No access token found for {shopify_domain}. Ensure the user is authenticated.")
+        return user.access_token
+
+
 
 # ✅ Fetch Shopify Credentials Securely
 shopify_credentials = get_shopify_credentials()
@@ -98,14 +108,7 @@ headers = {
     "Content-Type": "application/json"
 }
 
-# ✅ Fetch Shopify Access Token from Database
-def get_shopify_access_token(shopify_domain):
-    """Fetch Shopify Access Token for a specific shop from the User table."""
-    with app.app_context():
-        user = User.query.filter_by(shopify_domain=shopify_domain).first()
-        if not user:
-            raise ValueError(f"Error: No access token found for {shopify_domain}. Ensure the user is authenticated.")
-        return user.access_token
+
 
 
 
