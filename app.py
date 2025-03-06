@@ -31,7 +31,7 @@ from authlib.integrations.flask_client import OAuth
 
 
 
-from models import Setting  # ✅ Import your Setting model
+
 
 def get_shopify_credentials():
     """Fetch Shopify API credentials from the settings table."""
