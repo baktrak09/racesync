@@ -108,6 +108,7 @@ def get_shopify_access_token(shopify_domain):
         return user.access_token
 
 
+
 # ✅ Function to Fetch Database URL from Settings Table
 def get_database_url():
     """Fetch the database connection string from settings."""
