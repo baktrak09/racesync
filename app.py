@@ -92,16 +92,30 @@ def get_shopify_access_token(shopify_domain):
 
 
 # ✅ Fetch Shopify Credentials Securely
-shopify_credentials = get_shopify_credentials()
+import os
 
-SHOPIFY_API_KEY = shopify_credentials["SHOPIFY_API_KEY"]
-SHOPIFY_SECRET = shopify_credentials["SHOPIFY_SECRET"]
-SHOPIFY_REDIRECT_URI = shopify_credentials["SHOPIFY_REDIRECT_URI"]
-SHOPIFY_SCOPES = shopify_credentials["SHOPIFY_SCOPES"]
+# ✅ First, load environment variables in case the database isn't ready yet
+SHOPIFY_API_KEY = os.getenv("SHOPIFY_API_KEY")
+SHOPIFY_SECRET = os.getenv("SHOPIFY_SECRET")
+SHOPIFY_REDIRECT_URI = os.getenv("SHOPIFY_REDIRECT_URI", "https://racesync.onrender.com/oauth/callback")
+SHOPIFY_SCOPES = os.getenv("SHOPIFY_SCOPES", "read_products,write_products,read_orders")
 
-# ✅ Get the user’s Shopify Access Token from the database
-shopify_domain = "your-shop-name.myshopify.com"  # Replace with the actual user's domain
-SHOPIFY_ACCESS_TOKEN = get_shopify_access_token(shopify_domain)
+try:
+    # ✅ Only attempt to fetch from the database if the app is running normally
+    with app.app_context():
+        shopify_credentials = get_shopify_credentials()
+        SHOPIFY_API_KEY = shopify_credentials.get("SHOPIFY_API_KEY", SHOPIFY_API_KEY)
+        SHOPIFY_SECRET = shopify_credentials.get("SHOPIFY_SECRET", SHOPIFY_SECRET)
+        SHOPIFY_REDIRECT_URI = shopify_credentials.get("SHOPIFY_REDIRECT_URI", SHOPIFY_REDIRECT_URI)
+        SHOPIFY_SCOPES = shopify_credentials.get("SHOPIFY_SCOPES", SHOPIFY_SCOPES)
+
+        # ✅ Get the user’s Shopify Access Token
+        shopify_domain = "your-shop-name.myshopify.com"  # Replace dynamically
+        SHOPIFY_ACCESS_TOKEN = get_shopify_access_token(shopify_domain)
+
+except Exception as e:
+    print(f"[WARNING] Could not fetch Shopify credentials from DB: {e}")
+
 
 headers = {
     "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
