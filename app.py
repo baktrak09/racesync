@@ -29,14 +29,13 @@ from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import DataRequired, Email, EqualTo
 from authlib.integrations.flask_client import OAuth
 
-
-# ✅ Initialize the Flask App
+# ✅ Initialize Flask App
 app = Flask(__name__)
 
 # ✅ Configure Database (PostgreSQL for Production, SQLite for Local Testing)
 DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL:
-    app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL  # Production (Render)
+    app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL  # Production
 else:
     basedir = os.path.abspath(os.path.dirname(__file__))
     DATABASE_PATH = os.path.join(basedir, "instance", "app.db")
@@ -62,66 +61,84 @@ oauth = OAuth(app)
 # ✅ Import Models AFTER `db` is initialized
 from models import User, Setting
 
-# ✅ Function to Get Shopify Credentials
+# ✅ Function to Get Shopify Credentials (From Render Environment)
 def get_shopify_credentials():
     """Fetch Shopify API credentials from Render's environment variables."""
     credentials = {
         "SHOPIFY_API_KEY": os.getenv("SHOPIFY_API_KEY"),
         "SHOPIFY_SECRET": os.getenv("SHOPIFY_SECRET"),
         "SHOPIFY_REDIRECT_URI": os.getenv("SHOPIFY_REDIRECT_URI", "https://racesync.onrender.com/oauth/callback"),
-        "SHOPIFY_SCOPES": os.getenv("SHOPIFY_SCOPES", "read_products,write_products,read_orders")
+        "SHOPIFY_SCOPES": os.getenv("SHOPIFY_SCOPES", "read_products,write_products,read_orders"),
     }
-    print(f"[DEBUG] Shopify Credentials Loaded: {credentials}")  # ✅ Debugging
+    print(f"[DEBUG] Shopify Credentials Loaded: {credentials}")
 
     if not credentials["SHOPIFY_API_KEY"] or not credentials["SHOPIFY_SECRET"]:
         print("[WARNING] Shopify API credentials are missing! Check Render environment variables.")
 
     return credentials
 
-# ✅ Function to Fetch Shopify Access Token
-def get_shopify_access_token(shopify_domain):
-    """Fetch Shopify Access Token for a specific shop from the User table."""
-    try:
-        with app.app_context():
-            user = User.query.filter_by(shopify_domain=shopify_domain).first()
-            return user.access_token if user and user.access_token else None
-    except Exception as e:
-        print(f"[WARNING] Could not fetch Shopify Access Token: {e}")
-        return None
+# ✅ Function to Get Shopify Access Token for a Specific User
+def get_shopify_access_token(user_id):
+    """Fetch Shopify Access Token for a user from the database."""
+    with app.app_context():
+        user = User.query.filter_by(id=user_id).first()
+        if user and user.access_token:
+            return user.access_token
+        else:
+            print(f"[WARNING] No Shopify access token found for user {user_id}. User may not have set it yet.")
+            return None
 
-# ✅ Lazy Load Shopify Credentials
+# ✅ Function to Get Shopify Store Domain for a Specific User
+def get_shopify_domain(user_id):
+    """Fetch the Shopify store domain from the User table."""
+    with app.app_context():
+        user = User.query.filter_by(id=user_id).first()
+        if user and user.shopify_domain:
+            return user.shopify_domain
+        else:
+            print(f"[WARNING] No Shopify domain found for user {user_id}. They may not have set it yet.")
+            return None
+
+# ✅ Function to Fetch User-Specific FTP Credentials
+def get_user_ftp_credentials(user_id):
+    """Fetch user-specific FTP credentials from the database."""
+    with app.app_context():
+        user = User.query.filter_by(id=user_id).first()
+        if user:
+            return {
+                "FTP_HOST": user.ftp_host,
+                "FTP_USER": user.ftp_user,
+                "FTP_PASS": user.ftp_pass,
+            }
+        else:
+            print(f"[WARNING] No FTP credentials found for user {user_id}. They may not have set them yet.")
+            return None
+
+# ✅ Load Shopify Credentials (Environment Variables Only)
 SHOPIFY_CREDENTIALS = get_shopify_credentials()
 SHOPIFY_API_KEY = SHOPIFY_CREDENTIALS["SHOPIFY_API_KEY"]
 SHOPIFY_SECRET = SHOPIFY_CREDENTIALS["SHOPIFY_SECRET"]
 SHOPIFY_REDIRECT_URI = SHOPIFY_CREDENTIALS["SHOPIFY_REDIRECT_URI"]
 SHOPIFY_SCOPES = SHOPIFY_CREDENTIALS["SHOPIFY_SCOPES"]
 
-# ✅ Fetch Shopify Access Token ONLY if a domain is set
-shopify_domain = os.getenv("SHOPIFY_STORE_DOMAIN")  # Replace dynamically
+# ✅ Lazy-Load User Credentials (Only When Logged In)
+shopify_domain = None
 SHOPIFY_ACCESS_TOKEN = None
 
-if not shopify_domain:
-    print("[WARNING] SHOPIFY_STORE_DOMAIN is missing! Check your environment variables.")
-    shopify_domain = "your-shop-name.myshopify.com"  # Default fallback
+if current_user.is_authenticated:
+    shopify_domain = get_shopify_domain(current_user.id)
+    SHOPIFY_ACCESS_TOKEN = get_shopify_access_token(current_user.id)
 
-# ✅ Define the Shopify Store URL dynamically
-SHOPIFY_STORE_URL = f"https://{shopify_domain}/admin/api/2024-01"
+if not SHOPIFY_ACCESS_TOKEN:
+    print("[WARNING] Shopify Access Token is missing! Some API calls may fail.")
 
-# ✅ Debugging Output
-print("[DEBUG] Final Shopify Store URL:", SHOPIFY_STORE_URL)
+# ✅ Define Shopify Headers (Only if the token exists)
+headers = {
+    "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN if SHOPIFY_ACCESS_TOKEN else "",
+    "Content-Type": "application/json",
+}
 
-# ✅ Fetch Shopify Access Token ONLY if a domain is set
-if shopify_domain:
-    try:
-        with app.app_context():
-            SHOPIFY_ACCESS_TOKEN = get_shopify_access_token(shopify_domain)
-            if not SHOPIFY_ACCESS_TOKEN:
-                print("[WARNING] Shopify Access Token is missing! Some API calls may fail.")
-    except Exception as e:
-        print(f"[ERROR] Could not fetch Shopify credentials: {e}")
-
-
-# ✅ Function to Fetch Shopify Products (Only Run When Needed)
+# ✅ Function to Fetch Shopify Products (Only Runs When Needed)
 def fetch_shopify_products():
     """Fetch products from Shopify using credentials from the database."""
     if not SHOPIFY_ACCESS_TOKEN:
@@ -136,12 +153,12 @@ def fetch_shopify_products():
         print(f"[ERROR] Shopify API Request Failed: {response.text}")
         return None
 
-
-# User loader for Flask-Login
+# ✅ User Loader for Flask-Login
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+# ✅ User Registration Route
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
@@ -157,17 +174,15 @@ def register():
             flash("Email already registered. Please log in.", "danger")
             return redirect(url_for("login"))
 
-        hashed_password = generate_password_hash(password)  # No need to decode
-        new_user = User(email=email, password_hash=hashed_password)  # Use password_hash
+        hashed_password = generate_password_hash(password)
+        new_user = User(email=email, password_hash=hashed_password)
         db.session.add(new_user)
         db.session.commit()
 
         flash("Account created successfully! Please log in.", "success")
         return redirect(url_for("login"))
 
-    # ✅ Pass an empty `form` variable to prevent errors in extended templates
     return render_template("home/register.html", form={})
-
 
 
 
