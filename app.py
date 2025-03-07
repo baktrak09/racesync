@@ -29,13 +29,14 @@ from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import DataRequired, Email, EqualTo
 from authlib.integrations.flask_client import OAuth
 
-# ✅ Flask App Initialization
+
+# ✅ Initialize the Flask App
 app = Flask(__name__)
 
 # ✅ Configure Database (PostgreSQL for Production, SQLite for Local Testing)
 DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL:
-    app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL  # Render (Production)
+    app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL  # Production (Render)
 else:
     basedir = os.path.abspath(os.path.dirname(__file__))
     DATABASE_PATH = os.path.join(basedir, "instance", "app.db")
@@ -56,14 +57,12 @@ bcrypt = Bcrypt(app)
 login_manager = LoginManager(app)
 login_manager.login_view = "login"
 Session(app)
-
-# ✅ Shopify OAuth Setup (DO NOT USE `oauth.register()`)
 oauth = OAuth(app)
 
 # ✅ Import Models AFTER `db` is initialized
 from models import User, Setting
 
-# ✅ Shopify Credentials Retrieval (AFTER `app.app_context()` is Set)
+# ✅ Function to Get Shopify Credentials
 def get_shopify_credentials():
     """Fetch Shopify API credentials from Render's environment variables."""
     credentials = {
@@ -72,94 +71,63 @@ def get_shopify_credentials():
         "SHOPIFY_REDIRECT_URI": os.getenv("SHOPIFY_REDIRECT_URI", "https://racesync.onrender.com/oauth/callback"),
         "SHOPIFY_SCOPES": os.getenv("SHOPIFY_SCOPES", "read_products,write_products,read_orders")
     }
-
     print(f"[DEBUG] Shopify Credentials Loaded: {credentials}")  # ✅ Debugging
 
     if not credentials["SHOPIFY_API_KEY"] or not credentials["SHOPIFY_SECRET"]:
-        raise ValueError("Error: Shopify API credentials are missing! Check Render environment variables.")
+        print("[WARNING] Shopify API credentials are missing! Check Render environment variables.")
 
     return credentials
 
-# ✅ Fetch Shopify Access Token from Database
+# ✅ Function to Fetch Shopify Access Token
 def get_shopify_access_token(shopify_domain):
     """Fetch Shopify Access Token for a specific shop from the User table."""
-    with app.app_context():
-        user = User.query.filter_by(shopify_domain=shopify_domain).first()
-        if not user:
-            raise ValueError(f"Error: No access token found for {shopify_domain}. Ensure the user is authenticated.")
-        return user.access_token
+    try:
+        with app.app_context():
+            user = User.query.filter_by(shopify_domain=shopify_domain).first()
+            return user.access_token if user and user.access_token else None
+    except Exception as e:
+        print(f"[WARNING] Could not fetch Shopify Access Token: {e}")
+        return None
+
+# ✅ Lazy Load Shopify Credentials
+SHOPIFY_CREDENTIALS = get_shopify_credentials()
+SHOPIFY_API_KEY = SHOPIFY_CREDENTIALS["SHOPIFY_API_KEY"]
+SHOPIFY_SECRET = SHOPIFY_CREDENTIALS["SHOPIFY_SECRET"]
+SHOPIFY_REDIRECT_URI = SHOPIFY_CREDENTIALS["SHOPIFY_REDIRECT_URI"]
+SHOPIFY_SCOPES = SHOPIFY_CREDENTIALS["SHOPIFY_SCOPES"]
+
+# ✅ Fetch Shopify Access Token ONLY if a domain is set
+shopify_domain = os.getenv("SHOPIFY_STORE_DOMAIN")  # Replace dynamically
+SHOPIFY_ACCESS_TOKEN = None
+
+if not shopify_domain:
+    print("[WARNING] SHOPIFY_STORE_DOMAIN is missing! Check your environment variables.")
+    shopify_domain = "your-shop-name.myshopify.com"  # Default fallback
+
+# ✅ Define the Shopify Store URL dynamically
+SHOPIFY_STORE_URL = f"https://{shopify_domain}/admin/api/2024-01"
+
+# ✅ Debugging Output
+print("[DEBUG] Final Shopify Store URL:", SHOPIFY_STORE_URL)
+
+# ✅ Fetch Shopify Access Token ONLY if a domain is set
+if shopify_domain:
+    try:
+        with app.app_context():
+            SHOPIFY_ACCESS_TOKEN = get_shopify_access_token(shopify_domain)
+            if not SHOPIFY_ACCESS_TOKEN:
+                print("[WARNING] Shopify Access Token is missing! Some API calls may fail.")
+    except Exception as e:
+        print(f"[ERROR] Could not fetch Shopify credentials: {e}")
 
 
-
-# ✅ Fetch Shopify Credentials Securely
-import os
-
-# ✅ First, load environment variables in case the database isn't ready yet
-SHOPIFY_API_KEY = os.getenv("SHOPIFY_API_KEY")
-SHOPIFY_SECRET = os.getenv("SHOPIFY_SECRET")
-SHOPIFY_REDIRECT_URI = os.getenv("SHOPIFY_REDIRECT_URI", "https://racesync.onrender.com/oauth/callback")
-SHOPIFY_SCOPES = os.getenv("SHOPIFY_SCOPES", "read_products,write_products,read_orders")
-
-try:
-    # ✅ Only attempt to fetch from the database if the app is running normally
-    with app.app_context():
-        shopify_credentials = get_shopify_credentials()
-        SHOPIFY_API_KEY = shopify_credentials.get("SHOPIFY_API_KEY", SHOPIFY_API_KEY)
-        SHOPIFY_SECRET = shopify_credentials.get("SHOPIFY_SECRET", SHOPIFY_SECRET)
-        SHOPIFY_REDIRECT_URI = shopify_credentials.get("SHOPIFY_REDIRECT_URI", SHOPIFY_REDIRECT_URI)
-        SHOPIFY_SCOPES = shopify_credentials.get("SHOPIFY_SCOPES", SHOPIFY_SCOPES)
-
-        # ✅ Get the user’s Shopify Access Token
-        shopify_domain = "your-shop-name.myshopify.com"  # Replace dynamically
-        SHOPIFY_ACCESS_TOKEN = get_shopify_access_token(shopify_domain)
-
-except Exception as e:
-    print(f"[WARNING] Could not fetch Shopify credentials from DB: {e}")
-
-
-headers = {
-    "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
-    "Content-Type": "application/json"
-}
-
-
-
-
-
-# ✅ Function to Fetch Database URL from Settings Table
-def get_database_url():
-    """Fetch the database connection string from settings."""
-    with app.app_context():  # ✅ Ensures db session works
-        db_setting = Setting.query.filter_by(key="DATABASE_URL").first()
-    return db_setting.value if db_setting else None
-
-# ✅ Update App Config with Correct Database URL
-DATABASE_URL = get_database_url()
-if DATABASE_URL:
-    app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
-else:
-    raise ValueError("Error: Database URL is missing! Check your database settings.")
-
-# ✅ Securely Fetch Shopify API Credentials from Database
-def get_setting(key):
-    """Fetch setting value from the database based on key."""
-    with app.app_context():  # ✅ Ensures db session works
-        result = Setting.query.filter_by(key=key).first()
-    return result.value if result else None
-
-# ✅ Fetch Credentials Again from `settings` Table
-SHOPIFY_API_KEY = get_setting("SHOPIFY_API_KEY")
-SHOPIFY_SECRET = get_setting("SHOPIFY_SECRET")
-SHOPIFY_REDIRECT_URI = get_setting("SHOPIFY_REDIRECT_URI")
-SHOPIFY_SCOPES = get_setting("SHOPIFY_SCOPES")
-
-# ✅ Ensure API Keys Exist Before Running
-if not SHOPIFY_API_KEY or not SHOPIFY_SECRET:
-    raise ValueError("Error: Shopify API credentials are missing! Check your database settings.")
-
-# ✅ Function to Fetch Shopify Products
+# ✅ Function to Fetch Shopify Products (Only Run When Needed)
 def fetch_shopify_products():
     """Fetch products from Shopify using credentials from the database."""
+    if not SHOPIFY_ACCESS_TOKEN:
+        print("[ERROR] Cannot fetch Shopify products: Missing access token.")
+        return None
+
     url = f"https://{shopify_domain}/admin/api/2024-01/products.json?limit=50"
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
@@ -167,7 +135,6 @@ def fetch_shopify_products():
     else:
         print(f"[ERROR] Shopify API Request Failed: {response.text}")
         return None
-
 
 
 # User loader for Flask-Login
