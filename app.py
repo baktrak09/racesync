@@ -304,6 +304,16 @@ def install():
 
     return redirect(install_url)
 
+def get_shopify_domain(user_id):
+    """Fetch the Shopify store domain for a specific user."""
+    with app.app_context():
+        user = User.query.filter_by(id=user_id).first()
+        if user and user.shopify_domain:
+            return user.shopify_domain
+        else:
+            print(f"[WARNING] No Shopify domain found for user {user_id}. They may not have set it yet.")
+            return None
+
 
 def admin_required(f):
     """Decorator to ensure only admins can access certain routes."""
