@@ -794,7 +794,9 @@ def dashboard():
 @app.route('/inventory/')
 @login_required
 def index():
-    location_id = get_shopify_location_id()
+    shopify_domain = get_shopify_domain(current_user.id)  # Get the logged-in user's shop
+    location_id = get_shopify_location_id(shopify_domain)
+
     shopify_skus = {}
     return render_template('index.html', location_id=location_id, shopify_skus=shopify_skus, segment='index')
 
@@ -807,24 +809,25 @@ def get_shopify_skus_api():
         return jsonify({'error': str(e)}), 500
 
 def get_shopify_location_id(shop):
-    """Fetch the first location ID from Shopify for a specific store."""
-    user = User.query.filter_by(shopify_domain=shop).first()
-    if not user:
-        raise ValueError(f"🚨 Shopify store not found for {shop}.")
-
+    """Fetches the Shopify location ID for the given shop domain."""
+    headers = {
+        "X-Shopify-Access-Token": get_shopify_access_token(current_user.id),
+        "Content-Type": "application/json",
+    }
     url = f"https://{shop}/admin/api/2024-01/locations.json"
-    headers = get_shopify_headers(shop)
+    response = requests.get(url, headers=headers)
 
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
+    if response.status_code == 200:
         locations = response.json().get("locations", [])
-        location_id = locations[0]["id"] if locations else None
-        print(f"✅ Location ID fetched for {shop}: {location_id}")
-        return location_id
-    except Exception as e:
-        print(f"❌ Failed to fetch location ID for {shop}: {str(e)}")
+        if locations:
+            return locations[0]["id"]  # ✅ Return the first location ID
+        else:
+            print("[WARNING] No Shopify locations found!")
+            return None
+    else:
+        print(f"[ERROR] Failed to fetch Shopify locations: {response.text}")
         return None
+
 
 
 def fetch_shopify_skus_concurrent(shop):
