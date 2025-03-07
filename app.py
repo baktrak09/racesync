@@ -106,16 +106,24 @@ SHOPIFY_ACCESS_TOKEN = None
 @app.before_request
 def load_user_credentials():
     """Ensure user credentials are loaded only when authenticated."""
-    global shopify_domain, SHOPIFY_ACCESS_TOKEN
+    global shopify_domain, SHOPIFY_ACCESS_TOKEN, FTP_CREDENTIALS
 
     if current_user.is_authenticated:
         user_creds = get_user_credentials(current_user.id)
         if user_creds:
-            shopify_domain = user_creds["shopify_domain"]
-            SHOPIFY_ACCESS_TOKEN = user_creds["shopify_access_token"]
+            shopify_domain = user_creds.get("shopify_domain")
+            SHOPIFY_ACCESS_TOKEN = user_creds.get("shopify_access_token")
 
+        # ✅ Load FTP Credentials for the Logged-in User
+        FTP_CREDENTIALS = get_user_ftp_credentials(current_user.id)
+
+        # ✅ Warn if credentials are missing (but don't crash)
         if not SHOPIFY_ACCESS_TOKEN:
             print("[WARNING] Shopify Access Token is missing! Some API calls may fail.")
+
+        if not FTP_CREDENTIALS or not FTP_CREDENTIALS.get("FTP_HOST"):
+            print("[WARNING] FTP credentials are missing! Some features may not work.")
+            FTP_CREDENTIALS = None  # Prevent errors in other parts of the app
 
 # ✅ Define Shopify Headers (Only if the token exists)
 def get_shopify_headers():
@@ -923,8 +931,7 @@ def get_user_ftp_credentials(user_id):
 # ✅ Load FTP Credentials for the Logged-in User (Lazy Loading)
 FTP_CREDENTIALS = None
 
-if current_user.is_authenticated:
-    FTP_CREDENTIALS = get_user_ftp_credentials(current_user.id)
+
 
 # ✅ Prevent Crashing - If FTP Credentials Are Still Missing, Just Warn
 if not FTP_CREDENTIALS or not FTP_CREDENTIALS["FTP_HOST"] or not FTP_CREDENTIALS["FTP_USER"] or not FTP_CREDENTIALS["FTP_PASS"]:
