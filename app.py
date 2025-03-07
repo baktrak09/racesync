@@ -592,9 +592,7 @@ def safe_request(url, method='get', **kwargs):
             else:
                 raise
 
-# ✅ Route Debugging
-print("[DEBUG] Final Shopify Store URL:", SHOPIFY_STORE_URL)
-print("[DEBUG] Registered Routes:", app.url_map)
+
 
 
 
