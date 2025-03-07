@@ -113,7 +113,7 @@ def load_user_credentials():
 
         # 🚨 Prevent API calls if Shopify credentials are missing
         if not shopify_domain or not SHOPIFY_ACCESS_TOKEN:
-            if request.endpoint not in ["profiles", "logout"]:  # Allow them to go to profiles page
+            if request.endpoint not in ["profile", "logout"]:
                 print("[WARNING] No Shopify credentials! Redirecting to /profile")
                 return redirect(url_for("profile"))
 
