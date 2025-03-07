@@ -144,6 +144,8 @@ def fetch_shopify_products():
 # ✅ User Registration Route
 from flask import redirect, url_for
 
+from flask import redirect, url_for
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
@@ -177,6 +179,7 @@ def register():
 
 
 
+
 # ✅ Login Route
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -188,7 +191,7 @@ def login():
         if user and check_password_hash(user.password_hash, password):
             login_user(user)
             session['user_id'] = user.id  # Set session user_id
-            return redirect(url_for('index'))  # Redirect after successful login
+            return redirect(url_for('inventory'))
 
         flash("Invalid credentials!", "danger")
 
