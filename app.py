@@ -142,37 +142,39 @@ def fetch_shopify_products():
         return None
 
 # ✅ User Registration Route
+from flask import redirect, url_for
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
         email = request.form.get("email")
         password = request.form.get("password")
 
-        if not email or not password:
-            flash("All fields are required!", "danger")
-            return redirect(url_for("register"))
-
+        # Check if user already exists
         existing_user = User.query.filter_by(email=email).first()
         if existing_user:
-            flash("Email already registered. Please log in.", "danger")
+            flash("User already exists. Please log in.", "warning")
             return redirect(url_for("login"))
 
+        # Hash the password
         hashed_password = generate_password_hash(password)
 
-        # ✅ Ensure `access_token` is not NULL (Set default empty string)
+        # Create new user entry without Shopify/FTP data
         new_user = User(
             email=email,
             password_hash=hashed_password,
-            access_token="",  # ✅ Prevent NULL constraint errors
+            role="Regular",  # Default role
         )
-
         db.session.add(new_user)
         db.session.commit()
 
-        flash("Account created successfully! Please log in.", "success")
-        return redirect(url_for("login"))
+        flash("Registration successful! Please connect your Shopify store.", "success")
 
-    return render_template("home/register.html", form={})
+        # ✅ Redirect user to /profile to set up Shopify & FTP
+        return redirect(url_for("profile"))
+
+    return render_template("register.html")
+
 
 
 # ✅ Login Route
