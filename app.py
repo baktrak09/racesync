@@ -455,11 +455,11 @@ def profile():
         print("[DEBUG] POST request received")
 
         # Collect Shopify Store Domain
-        shopify_domain = request.form.get('shopify_domain').strip()
-        openai_api_key = request.form.get('openai_api_key')
-        ftp_host = request.form.get('ftp_host')
-        ftp_user = request.form.get('ftp_user')
-        ftp_pass = request.form.get('ftp_pass')
+        shopify_domain = request.form.get('shopify_domain', '').strip()
+        openai_api_key = request.form.get('openai_api_key', '').strip()
+        ftp_host = request.form.get('ftp_host', '').strip()
+        ftp_user = request.form.get('ftp_user', '').strip()
+        ftp_pass = request.form.get('ftp_pass', '').strip()
 
         # Debugging Statements to Verify Form Data
         print(f"[DEBUG] Received Shopify Store: {shopify_domain}")
@@ -469,54 +469,48 @@ def profile():
         print(f"[DEBUG] Received FTP Pass: {ftp_pass}")
 
         # Update user settings
-        current_user.shopify_domain = shopify_domain  # ✅ Add Shopify store to user profile
-        current_user.openai_api_key = openai_api_key
-        current_user.ftp_host = ftp_host
-        current_user.ftp_user = ftp_user
-        current_user.ftp_pass = ftp_pass
+        current_user.shopify_domain = shopify_domain if shopify_domain else current_user.shopify_domain
+        current_user.openai_api_key = openai_api_key if openai_api_key else current_user.openai_api_key
+        current_user.ftp_host = ftp_host if ftp_host else current_user.ftp_host
+        current_user.ftp_user = ftp_user if ftp_user else current_user.ftp_user
+        current_user.ftp_pass = ftp_pass if ftp_pass else current_user.ftp_pass
 
-        # Debugging Before Committing to Database
         print("[DEBUG] Updating user settings in database")
 
         try:
-            db.session.add(current_user)  # Explicitly add current user
             db.session.commit()
             print("[DEBUG] Settings updated in database")
+            flash("Settings updated successfully!", "success")
         except Exception as e:
             print(f"[DEBUG] Exception occurred while committing to database: {e}")
             db.session.rollback()
             flash("Failed to update settings. Please try again.", "danger")
-            return redirect(url_for('profile'))
 
-        flash("Settings updated successfully!", "success")
         return redirect(url_for('profile'))
 
     # Retrieve stored values
     try:
-        shopify_domain = current_user.shopify_domain or ""  # ✅ Retrieve Shopify domain
-        openai_api_key = current_user.openai_api_key
-        ftp_host = current_user.ftp_host
-        ftp_user = current_user.ftp_user
-        ftp_pass = current_user.ftp_pass
+        shopify_domain = current_user.shopify_domain or ""
+        openai_api_key = current_user.openai_api_key or ""
+        ftp_host = current_user.ftp_host or ""
+        ftp_user = current_user.ftp_user or ""
+        ftp_pass = current_user.ftp_pass or ""
 
-        # Debugging Statements to Check Retrieved Values
+        # Debugging Statements
         print(f"[DEBUG] Retrieved Shopify Store: {shopify_domain}")
         print(f"[DEBUG] Retrieved OpenAI API Key: {openai_api_key}")
         print(f"[DEBUG] Retrieved FTP Host: {ftp_host}")
         print(f"[DEBUG] Retrieved FTP User: {ftp_user}")
         print(f"[DEBUG] Retrieved FTP Pass: {ftp_pass}")
+
     except Exception as e:
         print(f"[DEBUG] Exception occurred while retrieving user settings: {e}")
         flash("Failed to retrieve settings. Please try again.", "danger")
         return redirect(url_for('profile'))
 
-    # Check for profile template
-    template_path = os.path.join(app.template_folder, 'profile.html')
-    print(f"[DEBUG] Template path: {template_path}")
-    if os.path.exists(template_path):
-        print("[DEBUG] profile.html file exists")
-    else:
-        print("[DEBUG] profile.html file does NOT exist")
+    # Prevent Infinite Redirect Loop
+    if not shopify_domain:
+        flash("Please connect your Shopify store before accessing other features.", "warning")
 
     try:
         print("[DEBUG] Attempting to render profile.html")
@@ -524,7 +518,6 @@ def profile():
     except Exception as e:
         print(f"[DEBUG] Exception occurred while rendering template: {e}")
         return str(e), 500
-
 
 
 
@@ -809,16 +802,21 @@ def fetch_product_by_id(shop, product_id):
 def dashboard():
     return f"Welcome, {current_user.username}! This is your dashboard."
 
-@app.route('/inventory/')
+@app.route("/inventory/")
 @login_required
 def inventory():
     shopify_domain = get_shopify_domain(current_user.id)
-    if not shopify_domain:
-        flash("You need to connect your Shopify store first.", "warning")
-        return redirect(url_for("setup_shopify"))  # Send them to a store setup page
+    shopify_token = get_shopify_access_token(current_user.id)
 
-    location_id = get_shopify_location_id(shopify_domain)  # This was causing the error
-    return render_template('inventory.html', location_id=location_id)
+    if not shopify_domain or not shopify_token:
+        flash("Please connect your Shopify store before accessing inventory.", "warning")
+        return redirect(url_for("profile"))  # ✅ Only redirect on inventory access
+
+    # Proceed with Shopify API calls only if credentials exist
+    location_id = get_shopify_location_id(shopify_domain, shopify_token)
+
+    return render_template("inventory.html", location_id=location_id)
+
 
 
 @app.route('/inventory/api/shopify-skus')
