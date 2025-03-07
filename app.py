@@ -314,6 +314,16 @@ def get_shopify_domain(user_id):
             print(f"[WARNING] No Shopify domain found for user {user_id}. They may not have set it yet.")
             return None
 
+def get_shopify_access_token(user_id):
+    """Fetch Shopify Access Token for a user from the database."""
+    with app.app_context():
+        user = User.query.filter_by(id=user_id).first()
+        if user and user.access_token:
+            return user.access_token
+        else:
+            print(f"[WARNING] No Shopify access token found for user {user_id}. They may not have set it yet.")
+            return None
+
 
 def admin_required(f):
     """Decorator to ensure only admins can access certain routes."""
