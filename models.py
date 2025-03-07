@@ -20,7 +20,7 @@ class User(db.Model, UserMixin):
     last_login = db.Column(db.DateTime, nullable=True)
     must_reset_password = db.Column(db.Boolean, default=False)
     shopify_domain = db.Column(db.String(255), unique=True, nullable=True)
-    access_token = db.Column(db.String(255), nullable=False)
+    access_token = db.Column(db.String(255), nullable=True)  # ✅ Allow NULL values
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)

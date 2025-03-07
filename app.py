@@ -165,14 +165,22 @@ def register():
             return redirect(url_for("login"))
 
         hashed_password = generate_password_hash(password)
-        new_user = User(email=email, password_hash=hashed_password)
+
+        # ✅ Ensure `access_token` is not NULL (Set default empty string)
+        new_user = User(
+            email=email,
+            password_hash=hashed_password,
+            access_token="",  # ✅ Prevent NULL constraint errors
+        )
+
         db.session.add(new_user)
         db.session.commit()
 
         flash("Account created successfully! Please log in.", "success")
         return redirect(url_for("login"))
 
-    return render_template("home/register.html")
+    return render_template("home/register.html", form={})
+
 
 # ✅ Login Route
 @app.route('/login', methods=['GET', 'POST'])
