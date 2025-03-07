@@ -813,12 +813,15 @@ def dashboard():
 
 @app.route('/inventory/')
 @login_required
-def index():
-    shopify_domain = get_shopify_domain(current_user.id)  # Get the logged-in user's shop
-    location_id = get_shopify_location_id(shopify_domain)
+def inventory():
+    shopify_domain = get_shopify_domain(current_user.id)
+    if not shopify_domain:
+        flash("You need to connect your Shopify store first.", "warning")
+        return redirect(url_for("setup_shopify"))  # Send them to a store setup page
 
-    shopify_skus = {}
-    return render_template('index.html', location_id=location_id, shopify_skus=shopify_skus, segment='index')
+    location_id = get_shopify_location_id(shopify_domain)  # This was causing the error
+    return render_template('inventory.html', location_id=location_id)
+
 
 @app.route('/inventory/api/shopify-skus')
 def get_shopify_skus_api():
