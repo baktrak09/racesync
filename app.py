@@ -45,8 +45,6 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_TYPE"] = "filesystem"
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=20)
-app.config["SESSION_FILE_DIR"] = os.path.join(basedir, "flask_session")
-app.config["SESSION_FILE_THRESHOLD"] = 500
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "your_secret_key")
 
 # ✅ Initialize Extensions
@@ -61,6 +59,11 @@ oauth = OAuth(app)
 # ✅ Import Models AFTER `db` is initialized
 from models import User, Setting
 
+# ✅ User Loader for Flask-Login
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
 # ✅ Function to Get Shopify Credentials (From Render Environment)
 def get_shopify_credentials():
     """Fetch Shopify API credentials from Render's environment variables."""
@@ -70,93 +73,72 @@ def get_shopify_credentials():
         "SHOPIFY_REDIRECT_URI": os.getenv("SHOPIFY_REDIRECT_URI", "https://racesync.onrender.com/oauth/callback"),
         "SHOPIFY_SCOPES": os.getenv("SHOPIFY_SCOPES", "read_products,write_products,read_orders"),
     }
-    print(f"[DEBUG] Shopify Credentials Loaded: {credentials}")
-
     if not credentials["SHOPIFY_API_KEY"] or not credentials["SHOPIFY_SECRET"]:
         print("[WARNING] Shopify API credentials are missing! Check Render environment variables.")
-
     return credentials
 
-# ✅ Function to Get Shopify Access Token for a Specific User
-def get_shopify_access_token(user_id):
-    """Fetch Shopify Access Token for a user from the database."""
+# ✅ Function to Get User-Specific Shopify & FTP Credentials
+def get_user_credentials(user_id):
+    """Fetch user-specific Shopify and FTP credentials from the database."""
     with app.app_context():
         user = User.query.filter_by(id=user_id).first()
-        if user and user.access_token:
-            return user.access_token
-        else:
-            print(f"[WARNING] No Shopify access token found for user {user_id}. User may not have set it yet.")
+        if not user:
+            print(f"[WARNING] No user found with ID {user_id}.")
             return None
+        return {
+            "shopify_domain": user.shopify_domain,
+            "shopify_access_token": user.access_token,
+            "ftp_host": user.ftp_host,
+            "ftp_user": user.ftp_user,
+            "ftp_pass": user.ftp_pass,
+        }
 
-# ✅ Function to Get Shopify Store Domain for a Specific User
-def get_shopify_domain(user_id):
-    """Fetch the Shopify store domain from the User table."""
-    with app.app_context():
-        user = User.query.filter_by(id=user_id).first()
-        if user and user.shopify_domain:
-            return user.shopify_domain
-        else:
-            print(f"[WARNING] No Shopify domain found for user {user_id}. They may not have set it yet.")
-            return None
-
-# ✅ Function to Fetch User-Specific FTP Credentials
-def get_user_ftp_credentials(user_id):
-    """Fetch user-specific FTP credentials from the database."""
-    with app.app_context():
-        user = User.query.filter_by(id=user_id).first()
-        if user:
-            return {
-                "FTP_HOST": user.ftp_host,
-                "FTP_USER": user.ftp_user,
-                "FTP_PASS": user.ftp_pass,
-            }
-        else:
-            print(f"[WARNING] No FTP credentials found for user {user_id}. They may not have set them yet.")
-            return None
-
-# ✅ Load Shopify Credentials (Environment Variables Only)
+# ✅ Lazy-Load Shopify Credentials (Only When User is Logged In)
 SHOPIFY_CREDENTIALS = get_shopify_credentials()
 SHOPIFY_API_KEY = SHOPIFY_CREDENTIALS["SHOPIFY_API_KEY"]
 SHOPIFY_SECRET = SHOPIFY_CREDENTIALS["SHOPIFY_SECRET"]
 SHOPIFY_REDIRECT_URI = SHOPIFY_CREDENTIALS["SHOPIFY_REDIRECT_URI"]
 SHOPIFY_SCOPES = SHOPIFY_CREDENTIALS["SHOPIFY_SCOPES"]
 
-# ✅ Lazy-Load User Credentials (Only When Logged In)
 shopify_domain = None
 SHOPIFY_ACCESS_TOKEN = None
 
-if current_user.is_authenticated:
-    shopify_domain = get_shopify_domain(current_user.id)
-    SHOPIFY_ACCESS_TOKEN = get_shopify_access_token(current_user.id)
+@app.before_request
+def load_user_credentials():
+    """Ensure user credentials are loaded only when authenticated."""
+    global shopify_domain, SHOPIFY_ACCESS_TOKEN
 
-if not SHOPIFY_ACCESS_TOKEN:
-    print("[WARNING] Shopify Access Token is missing! Some API calls may fail.")
+    if current_user.is_authenticated:
+        user_creds = get_user_credentials(current_user.id)
+        if user_creds:
+            shopify_domain = user_creds["shopify_domain"]
+            SHOPIFY_ACCESS_TOKEN = user_creds["shopify_access_token"]
+
+        if not SHOPIFY_ACCESS_TOKEN:
+            print("[WARNING] Shopify Access Token is missing! Some API calls may fail.")
 
 # ✅ Define Shopify Headers (Only if the token exists)
-headers = {
-    "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN if SHOPIFY_ACCESS_TOKEN else "",
-    "Content-Type": "application/json",
-}
+def get_shopify_headers():
+    """Returns the Shopify API headers if the access token is available."""
+    return {
+        "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN if SHOPIFY_ACCESS_TOKEN else "",
+        "Content-Type": "application/json",
+    }
 
 # ✅ Function to Fetch Shopify Products (Only Runs When Needed)
 def fetch_shopify_products():
     """Fetch products from Shopify using credentials from the database."""
-    if not SHOPIFY_ACCESS_TOKEN:
-        print("[ERROR] Cannot fetch Shopify products: Missing access token.")
+    if not SHOPIFY_ACCESS_TOKEN or not shopify_domain:
+        print("[ERROR] Cannot fetch Shopify products: Missing access token or domain.")
         return None
 
     url = f"https://{shopify_domain}/admin/api/2024-01/products.json?limit=50"
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=get_shopify_headers())
     if response.status_code == 200:
         return response.json()
     else:
         print(f"[ERROR] Shopify API Request Failed: {response.text}")
         return None
-
-# ✅ User Loader for Flask-Login
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
 
 # ✅ User Registration Route
 @app.route("/register", methods=["GET", "POST"])
@@ -169,8 +151,8 @@ def register():
             flash("All fields are required!", "danger")
             return redirect(url_for("register"))
 
-        existing_user_by_email = User.query.filter_by(email=email).first()
-        if existing_user_by_email:
+        existing_user = User.query.filter_by(email=email).first()
+        if existing_user:
             flash("Email already registered. Please log in.", "danger")
             return redirect(url_for("login"))
 
@@ -182,11 +164,9 @@ def register():
         flash("Account created successfully! Please log in.", "success")
         return redirect(url_for("login"))
 
-    return render_template("home/register.html", form={})
+    return render_template("home/register.html")
 
-
-
-# Login Route
+# ✅ Login Route
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -194,29 +174,29 @@ def login():
         password = request.form.get('password')
 
         user = User.query.filter_by(email=email).first()
-        if user and check_password_hash(user.password_hash, password):  # Use password_hash
+        if user and check_password_hash(user.password_hash, password):
             login_user(user)
-            session['user_id'] = user.id  # Set the session user_id
-            return redirect(url_for('index'))  # Redirect to index page after successful login
+            session['user_id'] = user.id  # Set session user_id
+            return redirect(url_for('index'))  # Redirect after successful login
 
         flash("Invalid credentials!", "danger")
 
     return render_template('login.html')
 
-
-# Logout Route
+# ✅ Logout Route
 @app.route('/logout')
 def logout():
-    logout_user()  # Log the user out using Flask-Login
-    session.pop('user_id', None)  # Clear the user_id from session
-    session.clear()  # Clear the entire session
+    logout_user()
+    session.pop('user_id', None)
+    session.clear()
     return redirect(url_for('login'))
 
+# ✅ Home Screen Route
 @app.route('/')
 def main_screen():
-    return redirect(url_for('login'))  # Redirect to the login page
+    return redirect(url_for('login'))  # Redirect to login
 
-# Initialize Database Tables on First Run
+# ✅ Initialize Database Tables on First Run
 with app.app_context():
     db.create_all()
 
