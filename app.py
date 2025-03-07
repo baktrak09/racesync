@@ -901,14 +901,36 @@ def get_shopify_products():
 
 
 CSV_FILENAME = "Motorstate1.csv"
+# ✅ Function to Fetch User-Specific FTP Credentials
+def get_user_ftp_credentials(user_id):
+    """Fetch user-specific FTP credentials from the database."""
+    with app.app_context():
+        user = User.query.filter_by(id=user_id).first()
+        if user:
+            return {
+                "FTP_HOST": user.ftp_host or os.getenv("FTP_HOST"),
+                "FTP_USER": user.ftp_user or os.getenv("FTP_USER"),
+                "FTP_PASS": user.ftp_pass or os.getenv("FTP_PASS"),
+            }
+        else:
+            print(f"[WARNING] No FTP credentials found for user {user_id}. Using environment variables.")
+            return {
+                "FTP_HOST": os.getenv("FTP_HOST"),
+                "FTP_USER": os.getenv("FTP_USER"),
+                "FTP_PASS": os.getenv("FTP_PASS"),
+            }
 
-def get_ftp_credentials():
-    """Fetch FTP credentials from the current logged-in user."""
-    if current_user.is_authenticated:
-        return current_user.ftp_host, current_user.ftp_user, current_user.ftp_pass
-    else:
-        print("[ERROR] No FTP credentials found (User not authenticated)!")
-        return None, None, None
+# ✅ Load FTP Credentials for the Logged-in User (Lazy Loading)
+FTP_CREDENTIALS = None
+
+if current_user.is_authenticated:
+    FTP_CREDENTIALS = get_user_ftp_credentials(current_user.id)
+
+# ✅ Prevent Crashing - If FTP Credentials Are Still Missing, Just Warn
+if not FTP_CREDENTIALS or not FTP_CREDENTIALS["FTP_HOST"] or not FTP_CREDENTIALS["FTP_USER"] or not FTP_CREDENTIALS["FTP_PASS"]:
+    print("[WARNING] FTP credentials are missing! Some features may not work.")
+    FTP_CREDENTIALS = None  # Ensure it doesn't break other parts of the code
+
 
 from sqlalchemy import text  # ✅ Import text from SQLAlchemy
 
@@ -930,7 +952,8 @@ with app.app_context():
     ftp_pass = get_setting("ftp_pass") or os.getenv("FTP_PASS")
 
 if not ftp_host or not ftp_user or not ftp_pass:
-    raise ValueError("Missing FTP credentials from both database and environment variables")
+    if not FTP_CREDENTIALS:
+        print("[WARNING] Missing FTP credentials. Some features may not work.")
 
 def connect_to_ftp():
     """Establish FTP connection using credentials from the database."""
