@@ -110,28 +110,29 @@ SHOPIFY_ACCESS_TOKEN = None
 def load_user_credentials():
     global shopify_domain, SHOPIFY_ACCESS_TOKEN
 
-    # ✅ Allow static files to load
+    # Allow static files to load without interruption
     if request.path.startswith('/static/'):
         return  
 
-    # ✅ Allow OAuth routes to proceed even if credentials are missing
-    allowed_routes = ["profile", "logout", "oauth_start", "oauth_callback"]
+    # Routes allowed without Shopify credentials
+    allowed_routes = ["profile", "logout", "oauth_start", "oauth_callback", "register", "login"]
+    if request.endpoint in allowed_routes:
+        return
 
     if current_user.is_authenticated:
+        # Fetch user-specific credentials
         user_creds = get_user_credentials(current_user.id)
-
-        # 🚨 Ensure we update global credentials!
         shopify_domain = user_creds.get("shopify_domain", "")
         SHOPIFY_ACCESS_TOKEN = user_creds.get("shopify_access_token", "")
 
-        # ✅ If the request is for an allowed route, let it pass through
-        if request.endpoint in allowed_routes:
-            return  
+        print(f"[DEBUG] Shopify Domain: {shopify_domain}, Access Token: {SHOPIFY_ACCESS_TOKEN}")
 
-        # 🚨 If credentials are STILL missing, redirect to /profile
+        # If credentials are missing, redirect to the profile page
         if not shopify_domain or not SHOPIFY_ACCESS_TOKEN:
-            print("[WARNING] No Shopify credentials! Redirecting to /profile")
+            flash("Please connect your Shopify store in your profile.", "warning")
             return redirect(url_for("profile"))
+
+
 
 
 
@@ -274,14 +275,22 @@ def oauth_start():
 
 @app.route("/oauth/callback")
 def oauth_callback():
+    # Log all parameters passed in the request for debugging
+    print(f"[DEBUG] OAuth Params: {request.args}")
+
+    # Retrieve required parameters
     shop = request.args.get("shop")
     code = request.args.get("code")
+    hmac = request.args.get("hmac")
 
-    if not shop or not code:
-        flash("OAuth failed! Missing parameters.", "danger")
-        return redirect(url_for("profile"))  # ✅ Redirect to profile if missing params
+    # Ensure all required parameters are present
+    if not shop or not code or not hmac:
+        flash("OAuth failed! Missing required parameters.", "danger")
+        return redirect(url_for("profile"))
 
-    # Exchange authorization code for access token
+    print(f"[DEBUG] Shop: {shop}, Code: {code}, HMAC: {hmac}")
+
+    # Exchange the authorization code for an access token
     token_url = f"https://{shop}/admin/oauth/access_token"
     response = requests.post(token_url, json={
         "client_id": SHOPIFY_API_KEY,
@@ -289,38 +298,41 @@ def oauth_callback():
         "code": code
     })
 
+    # Check response from Shopify
     if response.status_code == 200:
         token_data = response.json()
         access_token = token_data.get("access_token")
+        print(f"[DEBUG] Access Token: {access_token}")
 
         if not access_token:
-            flash("OAuth failed! No access token received.", "danger")
+            flash("OAuth failed! Shopify did not provide an access token.", "danger")
             return redirect(url_for("profile"))
 
-        # ✅ Store in session (temporary storage)
-        session["shopify_domain"] = shop
-        session["shopify_token"] = access_token
+        # Save the access token to the database
+        with app.app_context():
+            user = User.query.filter_by(shopify_domain=shop).first()
+            if user:
+                # Update existing user
+                user.access_token = access_token
+                print(f"[DEBUG] Updated User: {user.email}, Access Token: {user.access_token}")
+            else:
+                # Create a new user entry if needed (unlikely but safe fallback)
+                user = User(shopify_domain=shop, access_token=access_token)
+                db.session.add(user)
+                print(f"[DEBUG] Created User for Shopify Domain: {shop}")
 
-        # ✅ Store in database (persistent storage)
-        user = User.query.filter_by(shopify_domain=shop).first()
-        if user:
-            user.access_token = access_token
-        else:
-            user = User(shopify_domain=shop, access_token=access_token)
-            db.session.add(user)
+            # Save changes
+            db.session.commit()
 
-            print("DEBUG: Saving access token for", shop_url, "Token:", access_token)
+        flash("Shopify OAuth successful! Your store is now connected.", "success")
+        return redirect(url_for("inventory"))
 
-
-        db.session.commit()
-
-        flash("Shopify OAuth successful!", "success")
-        return redirect(url_for("inventory"))  # ✅ Redirect to main page
-    
     else:
-        flash(f"OAuth failed! Error: {response.text}", "danger")
+        # Log the error from Shopify's token exchange
+        print(f"[ERROR] Token Exchange Failed: {response.status_code}, {response.text}")
+        flash(f"OAuth failed! {response.text}", "danger")
         return redirect(url_for("profile"))
-    
+
 
 @app.route("/install")
 def install():
