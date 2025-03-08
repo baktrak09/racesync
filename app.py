@@ -257,7 +257,7 @@ def oauth_start():
 
     # ✅ Fix: Build the correct Shopify OAuth URL
     authorization_url = (
-        f"https://{shop}/admin/oauth/authorize?"
+        f"https://{shop}.myshopify.com/admin/oauth/authorize?"
         f"client_id={SHOPIFY_API_KEY}&"
         f"scope={SHOPIFY_SCOPES}&"
         f"redirect_uri={SHOPIFY_REDIRECT_URI}"
@@ -344,7 +344,7 @@ def install():
         return redirect(url_for("index"))
 
     install_url = (
-        f"https://{shop}/admin/oauth/authorize?"
+        f"https://{shop}.myshopify.com/admin/oauth/authorize?"
         f"client_id={SHOPIFY_API_KEY}&"
         f"scope={SHOPIFY_SCOPES}&"
         f"redirect_uri={SHOPIFY_REDIRECT_URI}"
