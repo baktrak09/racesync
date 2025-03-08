@@ -244,17 +244,10 @@ def oauth_start():
         flash("You must enter your Shopify store URL in your profile!", "danger")
         return redirect(url_for("profile"))
 
-    shop = user.shopify_domain.strip()
-    
-    # 🚨 Debugging: Print the Shopify domain and redirect URI
-    print(f"[DEBUG] Shopify Domain: {shop}")
-    print(f"[DEBUG] Redirect URI: {SHOPIFY_REDIRECT_URI}")
+    # ✅ Fix: Ensure the shop URL does NOT contain double 'https://'
+    shop = user.shopify_domain.strip().replace("https://", "").replace("http://", "")
 
-    # ✅ Check for missing values before constructing the URL
-    if not shop or not SHOPIFY_API_KEY or not SHOPIFY_SCOPES or not SHOPIFY_REDIRECT_URI:
-        flash("Missing OAuth configuration!", "danger")
-        return redirect(url_for("profile"))
-
+    # ✅ Fix: Build the correct Shopify OAuth URL
     authorization_url = (
         f"https://{shop}/admin/oauth/authorize?"
         f"client_id={SHOPIFY_API_KEY}&"
@@ -262,7 +255,8 @@ def oauth_start():
         f"redirect_uri={SHOPIFY_REDIRECT_URI}"
     )
 
-    print(f"[DEBUG] Redirecting to Shopify OAuth: {authorization_url}")  # 🔍 Debugging
+    print(f"[DEBUG] Corrected Shopify Domain: {shop}")
+    print(f"[DEBUG] Redirecting to Shopify OAuth: {authorization_url}")
 
     return redirect(authorization_url)
 
