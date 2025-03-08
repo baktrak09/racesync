@@ -1,0 +1,186 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %} Profile {% endblock title %}
+
+{% block content %}
+
+<div class="header pb-6 d-flex align-items-center" 
+     style="min-height: 500px; background-image: url(/static/assets/img/theme/truck.jpg); background-size: cover; background-position: center top;">
+  <!-- Mask -->
+  <span class="mask bg-gradient-default opacity-8"></span>
+  <!-- Header container -->
+  <div class="container-fluid d-flex align-items-center">
+    <div class="row">
+      <div class="col-lg-7 col-md-10">
+        <h1 class="display-2 text-white"> 
+          Hello {{ current_user.username }}
+        </h1>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Page content -->
+<div class="container-fluid mt--6">
+  <div class="row">
+    <div class="col-xl-4 order-xl-2">
+      <div class="card card-profile">
+        <img src="/static/assets/img/theme/chevelle.jpg" alt="Image placeholder" class="card-img-top">
+        <div class="row justify-content-center">
+          <div class="col-lg-3 order-lg-2">
+            <div class="card-profile-image">
+              <a href="#">
+                <img src="/static/assets/img/theme/team-4.jpg" class="rounded-circle">
+              </a>
+            </div>
+          </div>
+        </div>
+        <div class="card-header text-center border-0 pt-8 pt-md-4 pb-0 pb-md-4">
+          <div class="d-flex justify-content-between">
+            <a href="#" class="btn btn-sm btn-info  mr-4 ">Connect</a>
+            <a href="#" class="btn btn-sm btn-default float-right">Message</a>
+          </div>
+        </div>
+        <div class="card-body pt-0">
+          <div class="row">
+            <div class="col">
+              <div class="card-profile-stats d-flex justify-content-center">
+                <div>
+                  <span class="heading">22</span>
+                  <span class="description">Friends</span>
+                </div>
+                <div>
+                  <span class="heading">10</span>
+                  <span class="description">Photos</span>
+                </div>
+                <div>
+                  <span class="heading">89</span>
+                  <span class="description">Comments</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="text-center">
+            <h5 class="h3">
+              {{ current_user.username }}
+            </h5>
+            <div class="h5 font-weight-300">
+              {{ current_user.email }}
+            </div>
+            <div class="h5 mt-4">
+              <i class="ni business_briefcase-24 mr-2"></i>Solution Manager - Creative Tim Officer
+            </div>
+            <div>
+              <i class="ni education_hat mr-2"></i>University of Computer Science
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Profile Section -->
+    <div class="col-xl-8 order-xl-1">
+      <div class="card">
+        <div class="card-header">
+          <div class="row align-items-center">
+            <div class="col-8">
+              <h3 class="mb-0">Profile Settings</h3>
+            </div>
+          </div>
+        </div>
+        <div class="card-body">
+          <!-- Profile Settings Form -->
+          <form id="settings-form" action="{{ url_for('profile') }}" method="post">
+            
+            <!-- User Information -->
+            <h6 class="heading-small text-muted mb-4">User Information</h6>
+            <div class="pl-lg-4">
+              <div class="row">
+                <div class="col-lg-6">
+                  <div class="form-group">
+                    <label class="form-control-label" for="input-email">Email address</label>
+                    <input type="email" id="input-email" class="form-control" value="{{ current_user.email }}" disabled>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <hr class="my-4" />
+
+            <!-- Shopify Store Settings -->
+            <h6 class="heading-small text-muted mb-4">Shopify Store Settings</h6>
+            <div class="pl-lg-4">
+              <div class="row align-items-center">
+                <div class="col-lg-9">
+                  <div class="form-group">
+                    <label class="form-control-label" for="input-shopify-store">Your Shopify Store URL</label>
+                    <input type="text" id="input-shopify-store" class="form-control" name="shopify_domain" 
+                          value="{{ current_user.shopify_domain }}" placeholder="yourstore.myshopify.com" required>
+                  </div>
+                </div>
+                <div class="col-lg-3">
+                  {% if current_user.shopify_domain %}
+                    <a href="{{ url_for('oauth_start') }}" class="btn btn-success mt-3">
+                      Connect Shopify
+                    </a>
+                  {% else %}
+                    <button class="btn btn-secondary mt-3" disabled>Enter Store URL First</button>
+                  {% endif %}
+                </div>
+              </div>
+          </div>
+
+
+            <hr class="my-4" />
+
+            <!-- API & FTP Settings -->
+            <h6 class="heading-small text-muted mb-4">API & FTP Settings</h6>
+            <div class="pl-lg-4">
+              <div class="row">
+                <div class="col-lg-6">
+                  <div class="form-group">
+                    <label class="form-control-label" for="input-openai-api-key">OpenAI API Key</label>
+                    <input type="text" id="input-openai-api-key" class="form-control" name="openai_api_key" 
+                           value="{{ openai_api_key }}" placeholder="Enter OpenAI API Key">
+                  </div>
+                </div>
+                <div class="col-lg-6">
+                  <div class="form-group">
+                    <label class="form-control-label" for="input-ftp-host">FTP Host</label>
+                    <input type="text" id="input-ftp-host" class="form-control" name="ftp_host" 
+                           value="{{ ftp_host }}" placeholder="FTP Host">
+                  </div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-lg-6">
+                  <div class="form-group">
+                    <label class="form-control-label" for="input-ftp-user">FTP Username</label>
+                    <input type="text" id="input-ftp-user" class="form-control" name="ftp_user" 
+                           value="{{ ftp_user }}" placeholder="FTP Username">
+                  </div>
+                </div>
+                <div class="col-lg-6">
+                  <div class="form-group">
+                    <label class="form-control-label" for="input-ftp-pass">FTP Password</label>
+                    <input type="password" id="input-ftp-pass" class="form-control" name="ftp_pass" 
+                           value="{{ ftp_pass }}" placeholder="FTP Password">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Save Button -->
+            <div class="text-center">
+              <button type="submit" class="btn btn-primary my-4">Save Settings</button>
+            </div>
+
+          </form>
+          <!-- END OF FORM -->
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock content %}
