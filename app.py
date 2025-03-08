@@ -77,7 +77,6 @@ def get_shopify_credentials():
         print("[WARNING] Shopify API credentials are missing! Check Render environment variables.")
         
     return credentials
-print("DEBUG: Retrieved credentials - Store:", store_url, "Token:", token)
 
 
 # ✅ Function to Get User-Specific Shopify & FTP Credentials
@@ -95,6 +94,7 @@ def get_user_credentials(user_id):
             "ftp_user": user.ftp_user,
             "ftp_pass": user.ftp_pass,
         }
+
 
 # ✅ Lazy-Load Shopify Credentials (Only When User is Logged In)
 SHOPIFY_CREDENTIALS = get_shopify_credentials()
