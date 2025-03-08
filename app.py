@@ -111,17 +111,26 @@ def load_user_credentials():
     if request.path.startswith('/static/'):
         return  
 
+    # ✅ Allow access to OAuth-related routes to prevent redirect loop
+    allowed_routes = ["profile", "logout", "oauth_start", "oauth_callback"]
+
     if current_user.is_authenticated:
+        # 🔥 Fetch user credentials from the database
         user_creds = get_user_credentials(current_user.id)
+
+        # 🚨 Ensure we update global credentials!
         shopify_domain = user_creds.get("shopify_domain", "")
         SHOPIFY_ACCESS_TOKEN = user_creds.get("shopify_access_token", "")
 
-        # 🚨 Prevent API calls if Shopify credentials are missing
-        allowed_routes = ["profile", "logout", "oauth_start", "static"]
+        # ✅ Allow profile & OAuth routes to load even if credentials are missing
+        if request.endpoint in allowed_routes:
+            return  
+
+        # 🚨 If credentials are STILL missing, redirect to profile
         if not shopify_domain or not SHOPIFY_ACCESS_TOKEN:
-            if request.endpoint not in allowed_routes:
-                print("[WARNING] No Shopify credentials! Redirecting to /profile")
-                return redirect(url_for("profile"))
+            print("[WARNING] No Shopify credentials! Redirecting to /profile")
+            return redirect(url_for("profile"))
+
 
 
 # ✅ Define Shopify Headers (Only if the token exists)
