@@ -233,7 +233,7 @@ def oauth_start():
     print("[DEBUG] OAuth Callback hit!")
     params = request.args.to_dict()
     print("[DEBUG] OAuth Params:", params)
-    
+
     if not current_user.is_authenticated:
         flash("You must be logged in to connect your Shopify store!", "danger")
         return redirect(url_for("login"))
@@ -310,7 +310,7 @@ def oauth_callback():
     
     else:
         flash(f"OAuth failed! Error: {response.text}", "danger")
-        return redirect(url_for("index"))  # ✅ Redirect to index instead of login
+        return redirect(url_for("inventory"))
 
 @app.route("/install")
 def install():
