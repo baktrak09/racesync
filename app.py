@@ -106,17 +106,22 @@ SHOPIFY_ACCESS_TOKEN = None
 @app.before_request
 def load_user_credentials():
     global shopify_domain, SHOPIFY_ACCESS_TOKEN
+
+    # ✅ Allow static files to load without redirecting
+    if request.path.startswith('/static/'):
+        return  
+
     if current_user.is_authenticated:
         user_creds = get_user_credentials(current_user.id)
-        shopify_domain = user_creds["shopify_domain"]
-        SHOPIFY_ACCESS_TOKEN = user_creds["shopify_access_token"]
+        shopify_domain = user_creds.get("shopify_domain", "")
+        SHOPIFY_ACCESS_TOKEN = user_creds.get("shopify_access_token", "")
 
         # 🚨 Prevent API calls if Shopify credentials are missing
         if not shopify_domain or not SHOPIFY_ACCESS_TOKEN:
-            if request.endpoint not in ["profile", "logout"]:
+            # ✅ Allow users to access profile & logout pages even without credentials
+            if request.endpoint not in ["profile", "logout", "static"]:
                 print("[WARNING] No Shopify credentials! Redirecting to /profile")
                 return redirect(url_for("profile"))
-
 
 # ✅ Define Shopify Headers (Only if the token exists)
 def get_shopify_headers():
