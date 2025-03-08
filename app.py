@@ -311,15 +311,16 @@ def oauth_callback():
         # Save the access token to the database
         with app.app_context():
             user = User.query.filter_by(shopify_domain=shop).first()
-            if user:
-                # Update existing user
-                user.access_token = access_token
-                print(f"[DEBUG] Updated User: {user.email}, Access Token: {user.access_token}")
-            else:
-                # Create a new user entry if needed (unlikely but safe fallback)
-                user = User(shopify_domain=shop, access_token=access_token)
-                db.session.add(user)
-                print(f"[DEBUG] Created User for Shopify Domain: {shop}")
+        if user:
+            user.access_token = access_token
+            db.session.commit()  # ✅ Commit changes to save to the database
+            print(f"[DEBUG] Updated User: {user.email}, Access Token: {user.access_token}")
+        else:
+            # This block should rarely execute since the user is created earlier
+            user = User(shopify_domain=shop, access_token=access_token)
+            db.session.add(user)
+            db.session.commit()  # ✅ Commit the new user
+            print(f"[DEBUG] Created User for Shopify Domain: {shop}")
 
             # Save changes
             db.session.commit()
