@@ -117,17 +117,12 @@ def load_user_credentials():
         SHOPIFY_ACCESS_TOKEN = user_creds.get("shopify_access_token", "")
 
         # 🚨 Prevent API calls if Shopify credentials are missing
+        allowed_routes = ["profile", "logout", "oauth_start", "static"]
         if not shopify_domain or not SHOPIFY_ACCESS_TOKEN:
-            # ✅ Allow users to access profile & logout pages even without credentials
-            if request.endpoint not in ["profile", "logout", "static"]:
-                print("[WARNING] No Shopify credentials! Redirecting to /profile")
-                return redirect(url_for("profile"))
-            
-        if not shopify_domain or not SHOPIFY_ACCESS_TOKEN:
-            allowed_routes = ["profile", "logout", "oauth_start"]
             if request.endpoint not in allowed_routes:
                 print("[WARNING] No Shopify credentials! Redirecting to /profile")
                 return redirect(url_for("profile"))
+
 
 # ✅ Define Shopify Headers (Only if the token exists)
 def get_shopify_headers():
