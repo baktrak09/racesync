@@ -276,13 +276,13 @@ def oauth_callback():
 
     if not shop or not code:
         flash("OAuth failed! Missing parameters.", "danger")
-        return redirect(url_for("inventory"))  # ✅ Redirect to /inventory instead of index
+        return redirect(url_for("inventory"))
 
     # Exchange authorization code for access token
     token_url = f"https://{shop}/admin/oauth/access_token"
     
     response = requests.post(token_url, json={
-        "client_id": SHOPIFY_API_KEY,  # ✅ Ensure these variables are correct
+        "client_id": SHOPIFY_API_KEY,
         "client_secret": SHOPIFY_SECRET,
         "code": code
     })
@@ -293,7 +293,11 @@ def oauth_callback():
 
         if not access_token:
             flash("OAuth failed! No access token received.", "danger")
-            return redirect(url_for("inventory"))  # ✅ Redirect to /inventory
+            return redirect(url_for("inventory"))
+
+        # ✅ Store token in the session to persist across requests
+        session["shopify_domain"] = shop
+        session["shopify_token"] = access_token
 
         # ✅ Store token in the database
         user = User.query.filter_by(shopify_domain=shop).first()
@@ -306,11 +310,13 @@ def oauth_callback():
         db.session.commit()
 
         flash("Shopify OAuth successful!", "success")
-        return redirect(url_for("inventory"))  # ✅ Redirect to /inventory
+        return redirect(url_for("inventory"))  # ✅ Redirect to the main page
     
     else:
         flash(f"OAuth failed! Error: {response.text}", "danger")
-        return redirect(url_for("inventory"))  # ✅ Redirect to /inventory in case of failure
+        return redirect(url_for("inventory"))
+
+
 
 @app.route("/install")
 def install():
