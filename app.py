@@ -230,6 +230,10 @@ with app.app_context():
 
 @app.route("/oauth/start")
 def oauth_start():
+    print("[DEBUG] OAuth Callback hit!")
+    params = request.args.to_dict()
+    print("[DEBUG] OAuth Params:", params)
+    
     if not current_user.is_authenticated:
         flash("You must be logged in to connect your Shopify store!", "danger")
         return redirect(url_for("login"))
