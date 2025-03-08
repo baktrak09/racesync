@@ -107,26 +107,25 @@ SHOPIFY_ACCESS_TOKEN = None
 def load_user_credentials():
     global shopify_domain, SHOPIFY_ACCESS_TOKEN
 
-    # ✅ Allow static files to load without redirecting
+    # ✅ Allow static files to load
     if request.path.startswith('/static/'):
         return  
 
-    # ✅ Allow access to OAuth-related routes to prevent redirect loop
+    # ✅ Allow OAuth routes to proceed even if credentials are missing
     allowed_routes = ["profile", "logout", "oauth_start", "oauth_callback"]
 
     if current_user.is_authenticated:
-        # 🔥 Fetch user credentials from the database
         user_creds = get_user_credentials(current_user.id)
 
         # 🚨 Ensure we update global credentials!
         shopify_domain = user_creds.get("shopify_domain", "")
         SHOPIFY_ACCESS_TOKEN = user_creds.get("shopify_access_token", "")
 
-        # ✅ Allow profile & OAuth routes to load even if credentials are missing
+        # ✅ If the request is for an allowed route, let it pass through
         if request.endpoint in allowed_routes:
             return  
 
-        # 🚨 If credentials are STILL missing, redirect to profile
+        # 🚨 If credentials are STILL missing, redirect to /profile
         if not shopify_domain or not SHOPIFY_ACCESS_TOKEN:
             print("[WARNING] No Shopify credentials! Redirecting to /profile")
             return redirect(url_for("profile"))
@@ -230,7 +229,6 @@ with app.app_context():
     db.create_all()
 
 @app.route("/oauth/start")
-@login_required
 def oauth_start():
     if not current_user.is_authenticated:
         flash("You must be logged in to connect your Shopify store!", "danger")
@@ -238,11 +236,24 @@ def oauth_start():
 
     user = User.query.get(current_user.id)
 
-    if not user or not user.shopify_domain:
+    if not user:
+        flash("User not found!", "danger")
+        return redirect(url_for("profile"))
+
+    if not user.shopify_domain:
         flash("You must enter your Shopify store URL in your profile!", "danger")
-        return redirect(url_for("profile"))  # Redirect to profile page
+        return redirect(url_for("profile"))
 
     shop = user.shopify_domain.strip()
+    
+    # 🚨 Debugging: Print the Shopify domain and redirect URI
+    print(f"[DEBUG] Shopify Domain: {shop}")
+    print(f"[DEBUG] Redirect URI: {SHOPIFY_REDIRECT_URI}")
+
+    # ✅ Check for missing values before constructing the URL
+    if not shop or not SHOPIFY_API_KEY or not SHOPIFY_SCOPES or not SHOPIFY_REDIRECT_URI:
+        flash("Missing OAuth configuration!", "danger")
+        return redirect(url_for("profile"))
 
     authorization_url = (
         f"https://{shop}/admin/oauth/authorize?"
@@ -251,7 +262,10 @@ def oauth_start():
         f"redirect_uri={SHOPIFY_REDIRECT_URI}"
     )
 
+    print(f"[DEBUG] Redirecting to Shopify OAuth: {authorization_url}")  # 🔍 Debugging
+
     return redirect(authorization_url)
+
 
 
 
