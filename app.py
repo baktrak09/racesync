@@ -75,7 +75,10 @@ def get_shopify_credentials():
     }
     if not credentials["SHOPIFY_API_KEY"] or not credentials["SHOPIFY_SECRET"]:
         print("[WARNING] Shopify API credentials are missing! Check Render environment variables.")
+        
     return credentials
+print("DEBUG: Retrieved credentials - Store:", store_url, "Token:", token)
+
 
 # ✅ Function to Get User-Specific Shopify & FTP Credentials
 def get_user_credentials(user_id):
@@ -306,6 +309,9 @@ def oauth_callback():
             user = User(shopify_domain=shop, access_token=access_token)
             db.session.add(user)
 
+            print("DEBUG: Saving access token for", shop_url, "Token:", access_token)
+
+
         db.session.commit()
 
         flash("Shopify OAuth successful!", "success")
@@ -314,6 +320,7 @@ def oauth_callback():
     else:
         flash(f"OAuth failed! Error: {response.text}", "danger")
         return redirect(url_for("profile"))
+    
 
 @app.route("/install")
 def install():
