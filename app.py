@@ -286,31 +286,43 @@ def oauth_callback():
     # Ensure all required parameters are present
     if not shop or not code or not hmac:
         flash("OAuth failed! Missing required parameters.", "danger")
+        print("[ERROR] OAuth missing parameters: shop, code, or hmac")
         return redirect(url_for("profile"))
 
     print(f"[DEBUG] Shop: {shop}, Code: {code}, HMAC: {hmac}")
 
-    # Exchange the authorization code for an access token
+    # Construct the token exchange URL
     token_url = f"https://{shop}/admin/oauth/access_token"
-    response = requests.post(token_url, json={
+
+    # Prepare the payload
+    payload = {
         "client_id": SHOPIFY_API_KEY,
         "client_secret": SHOPIFY_SECRET,
         "code": code
-    })
+    }
+
+    # Debugging: Log what we're sending
+    print(f"[DEBUG] Requesting Access Token from: {token_url}")
+    print(f"[DEBUG] Payload: {json.dumps(payload, indent=2)}")
+
+    # Exchange the authorization code for an access token
+    response = requests.post(token_url, json=payload)
 
     # Check response from Shopify
     if response.status_code == 200:
         token_data = response.json()
         access_token = token_data.get("access_token")
-        print(f"[DEBUG] Access Token: {access_token}")
+        print(f"[DEBUG] Shopify Response: {token_data}")
 
         if not access_token:
             flash("OAuth failed! Shopify did not provide an access token.", "danger")
+            print("[ERROR] Shopify did not return an access token!")
             return redirect(url_for("profile"))
 
         # Save the access token to the database
         with app.app_context():
             user = User.query.filter_by(shopify_domain=shop).first()
+
         if user:
             user.access_token = access_token
             db.session.commit()  # ✅ Commit changes to save to the database
@@ -322,19 +334,28 @@ def oauth_callback():
             db.session.commit()  # ✅ Commit the new user
             print(f"[DEBUG] Created User for Shopify Domain: {shop}")
 
-            # Save changes
-            db.session.commit()
+        # Clear session to force a fresh OAuth login next time
+        session.clear()
+        print("[DEBUG] Session cleared to force fresh OAuth login.")
 
         flash("Shopify OAuth successful! Your store is now connected.", "success")
         return redirect(url_for("inventory"))
 
     else:
-        # Log the error from Shopify's token exchange
+        # Log detailed response from Shopify
         print(f"[ERROR] Token Exchange Failed: {response.status_code}, {response.text}")
+        print(f"[DEBUG] Headers: {response.headers}")
+        print(f"[DEBUG] Request Sent: {response.request.body}")
+        print(f"[DEBUG] Raw Response: {response.content}")
+
         flash(f"OAuth failed! {response.text}", "danger")
         return redirect(url_for("profile"))
+    
 
 
+
+
+# ✅ Install Route
 @app.route("/install")
 def install():
     shop = request.args.get("shop")  # Get Shopify store domain
