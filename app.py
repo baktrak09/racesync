@@ -845,6 +845,9 @@ def inventory():
     # Proceed with Shopify API calls only if credentials exist
     location_id = get_shopify_location_id(shopify_domain, shopify_token)
 
+    print("Session Shopify Token:", session.get("shopify_token"))
+
+
     return render_template("inventory.html", location_id=location_id)
 
 
