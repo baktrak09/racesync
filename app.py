@@ -290,20 +290,18 @@ def oauth_callback():
         print("[ERROR] Missing required OAuth parameters.")
         return redirect(url_for("profile"))
 
-    # ✅ Fetch Shopify API credentials from the database
-    with app.app_context():
-        shopify_config = Config.query.first()
-        if not shopify_config:
-            flash("OAuth failed! Missing API credentials.", "danger")
-            print("[ERROR] Missing API credentials in the database.")
-            return redirect(url_for("profile"))
+    # ✅ Load Shopify API credentials from environment variables
+    SHOPIFY_API_KEY = os.getenv("SHOPIFY_API_KEY")
+    SHOPIFY_SECRET = os.getenv("SHOPIFY_SECRET")
 
-        SHOPIFY_API_KEY = shopify_config.shopify_api_key
-        SHOPIFY_SECRET = shopify_config.shopify_api_secret
+    if not SHOPIFY_API_KEY or not SHOPIFY_SECRET:
+        flash("OAuth failed! Missing API credentials.", "danger")
+        print("[ERROR] Missing API credentials from environment variables.")
+        return redirect(url_for("profile"))
 
-    # ✅ Verify HMAC
+    # ✅ Verify HMAC (Shopify request validation)
     params = request.args.to_dict(flat=False)
-    params.pop("hmac", None)
+    params.pop("hmac", None)  # Remove HMAC before validation
     sorted_params = "&".join(f"{key}={','.join(value)}" for key, value in sorted(params.items()))
     calculated_hmac = hmac.new(SHOPIFY_SECRET.encode("utf-8"), sorted_params.encode("utf-8"), hashlib.sha256).hexdigest()
 
@@ -314,7 +312,7 @@ def oauth_callback():
 
     print(f"[DEBUG] Shop: {shop}, Code: {code}, HMAC Validated Successfully.")
 
-    # ✅ Exchange Code for Access Token
+    # ✅ Exchange Authorization Code for Access Token
     token_url = f"https://{shop}/admin/oauth/access_token"
     try:
         response = requests.post(token_url, json={
@@ -339,7 +337,7 @@ def oauth_callback():
         print(f"[ERROR] Token Exchange Request Failed: {str(e)}")
         return redirect(url_for("profile"))
 
-    # ✅ Fetch Shopify Store Info
+    # ✅ Retrieve Store Email from Shopify
     headers = {"X-Shopify-Access-Token": access_token}
     shop_info_url = f"https://{shop}/admin/api/2023-01/shop.json"
 
@@ -347,7 +345,7 @@ def oauth_callback():
         shop_response = requests.get(shop_info_url, headers=headers, timeout=10)
         shop_response.raise_for_status()
         shop_data = shop_response.json()
-        email = shop_data.get("shop", {}).get("email", f"no-email-{shop}")
+        email = shop_data.get("shop", {}).get("email", f"no-email-{shop}")  # Fallback to prevent NULL values
         print(f"[DEBUG] Retrieved Shop Email: {email}")
 
     except requests.RequestException as e:
@@ -388,7 +386,6 @@ def oauth_callback():
 
     flash("Shopify OAuth successful! Your store is now connected.", "success")
     return redirect(url_for("inventory"))
-
 
 
 
