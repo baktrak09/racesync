@@ -285,24 +285,25 @@ def oauth_callback():
     code = request.args.get("code")
     received_hmac = request.args.get("hmac")
 
-    # Validate required parameters
     if not shop or not code or not received_hmac:
         flash("OAuth failed! Missing required parameters.", "danger")
         print("[ERROR] Missing required OAuth parameters.")
         return redirect(url_for("profile"))
 
-    # ✅ Fetch Shopify API credentials securely
-    SHOPIFY_API_KEY = os.getenv("SHOPIFY_API_KEY")
-    SHOPIFY_SECRET = os.getenv("SHOPIFY_SECRET")
+    # ✅ Fetch Shopify API credentials from the database
+    with app.app_context():
+        shopify_config = Config.query.first()
+        if not shopify_config:
+            flash("OAuth failed! Missing API credentials.", "danger")
+            print("[ERROR] Missing API credentials in the database.")
+            return redirect(url_for("profile"))
 
-    if not SHOPIFY_API_KEY or not SHOPIFY_SECRET:
-        print("[ERROR] Shopify API credentials are missing!")
-        flash("OAuth failed! API credentials are not configured.", "danger")
-        return redirect(url_for("profile"))
+        SHOPIFY_API_KEY = shopify_config.shopify_api_key
+        SHOPIFY_SECRET = shopify_config.shopify_api_secret
 
-    # ✅ Verify HMAC to ensure request integrity
+    # ✅ Verify HMAC
     params = request.args.to_dict(flat=False)
-    params.pop("hmac", None)  
+    params.pop("hmac", None)
     sorted_params = "&".join(f"{key}={','.join(value)}" for key, value in sorted(params.items()))
     calculated_hmac = hmac.new(SHOPIFY_SECRET.encode("utf-8"), sorted_params.encode("utf-8"), hashlib.sha256).hexdigest()
 
@@ -313,7 +314,7 @@ def oauth_callback():
 
     print(f"[DEBUG] Shop: {shop}, Code: {code}, HMAC Validated Successfully.")
 
-    # ✅ Exchange the authorization code for an access token
+    # ✅ Exchange Code for Access Token
     token_url = f"https://{shop}/admin/oauth/access_token"
     try:
         response = requests.post(token_url, json={
@@ -321,6 +322,7 @@ def oauth_callback():
             "client_secret": SHOPIFY_SECRET,
             "code": code
         }, timeout=10)
+
         response.raise_for_status()
         token_data = response.json()
         access_token = token_data.get("access_token")
@@ -337,7 +339,7 @@ def oauth_callback():
         print(f"[ERROR] Token Exchange Request Failed: {str(e)}")
         return redirect(url_for("profile"))
 
-    # ✅ Retrieve store information including email
+    # ✅ Fetch Shopify Store Info
     headers = {"X-Shopify-Access-Token": access_token}
     shop_info_url = f"https://{shop}/admin/api/2023-01/shop.json"
 
@@ -345,29 +347,48 @@ def oauth_callback():
         shop_response = requests.get(shop_info_url, headers=headers, timeout=10)
         shop_response.raise_for_status()
         shop_data = shop_response.json()
-        email = shop_data.get("shop", {}).get("email", f"no-email-{shop}")  
+        email = shop_data.get("shop", {}).get("email", f"no-email-{shop}")
+        print(f"[DEBUG] Retrieved Shop Email: {email}")
 
     except requests.RequestException as e:
         email = f"no-email-{shop}"
         print(f"[ERROR] Failed to fetch store details from Shopify: {str(e)}")
 
-    # ✅ Store or update user in the database
+    # ✅ Store or Update User in Database
     with app.app_context():
-        user = User.query.filter((User.shopify_domain == shop) | (User.email == email)).with_for_update().first()
+        user = User.query.filter(
+            (User.shopify_domain == shop) | (User.email == email)
+        ).first()
+
         if user:
+            print(f"[DEBUG] Updating existing user: {user.email}")
             user.access_token = access_token
         else:
-            user = User(email=email, shopify_domain=shop, access_token=access_token)
+            print(f"[DEBUG] Creating new user: {email}")
+            user = User(
+                email=email,
+                shopify_domain=shop,
+                access_token=access_token
+            )
             db.session.add(user)
-        db.session.commit()
 
-    # ✅ Secure session storage
+        try:
+            db.session.commit()
+            print(f"[DEBUG] Database commit successful for user: {user.email}")
+        except Exception as e:
+            db.session.rollback()
+            print(f"[ERROR] Database commit failed: {str(e)}")
+            flash("OAuth failed! Could not save user data.", "danger")
+            return redirect(url_for("profile"))
+
+    # ✅ Store Access Token in Session
     session["shop"] = shop
     session["access_token"] = access_token
-    session.modified = True
+    print(f"[DEBUG] Session Updated - Shopify Domain: {session.get('shop')}, Access Token: {session.get('access_token')}")
 
-    flash("Shopify OAuth successful!", "success")
+    flash("Shopify OAuth successful! Your store is now connected.", "success")
     return redirect(url_for("inventory"))
+
 
 
 
