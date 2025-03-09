@@ -320,14 +320,18 @@ def oauth_callback():
             email = f"no-email-{shop}"  # Prevents NOT NULL error, use a placeholder
 
         with app.app_context():
-            user = User.query.filter_by(shopify_domain=shop).first()
+            user = User.query.filter(
+                (User.shopify_domain == shop) | (User.email == email)
+            ).first()  # Check if user exists by email OR shopify domain
+
             if user:
                 user.access_token = access_token
                 db.session.commit()
                 print(f"[DEBUG] Updated User: {user.email}, Access Token: {user.access_token}")
             else:
+                print(f"[DEBUG] Creating new user: {email}")
                 user = User(
-                    email=email,  # ✅ Ensure email is provided
+                    email=email,
                     shopify_domain=shop,
                     access_token=access_token
                 )
@@ -342,7 +346,6 @@ def oauth_callback():
         print(f"[ERROR] Token Exchange Failed: {response.status_code}, {response.text}")
         flash(f"OAuth failed! {response.text}", "danger")
         return redirect(url_for("profile"))
-    
 
 
 
