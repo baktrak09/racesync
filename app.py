@@ -289,20 +289,18 @@ def oauth_callback():
         print("[ERROR] Missing required OAuth parameters.")
         return redirect(url_for("profile"))
 
-    # ✅ Fetch Shopify API credentials from the database
-    with app.app_context():
-        shopify_config = Config.query.first()  # Assuming there's only one config row
-        if not shopify_config:
-            flash("OAuth failed! Missing API credentials.", "danger")
-            print("[ERROR] Missing API credentials in the database.")
-            return redirect(url_for("profile"))
+    # ✅ Fetch Shopify API credentials securely
+    SHOPIFY_API_KEY = os.getenv("SHOPIFY_API_KEY")
+    SHOPIFY_SECRET = os.getenv("SHOPIFY_SECRET")
 
-        SHOPIFY_API_KEY = shopify_config.shopify_api_key
-        SHOPIFY_SECRET = shopify_config.shopify_api_secret
+    if not SHOPIFY_API_KEY or not SHOPIFY_SECRET:
+        print("[ERROR] Shopify API credentials are missing!")
+        flash("OAuth failed! API credentials are not configured.", "danger")
+        return redirect(url_for("profile"))
 
-    # Verify HMAC to ensure request integrity
+    # ✅ Verify HMAC to ensure request integrity
     params = request.args.to_dict(flat=False)
-    params.pop("hmac", None)  # Remove HMAC from parameters before validation
+    params.pop("hmac", None)  
     sorted_params = "&".join(f"{key}={','.join(value)}" for key, value in sorted(params.items()))
     calculated_hmac = hmac.new(SHOPIFY_SECRET.encode("utf-8"), sorted_params.encode("utf-8"), hashlib.sha256).hexdigest()
 
@@ -313,16 +311,15 @@ def oauth_callback():
 
     print(f"[DEBUG] Shop: {shop}, Code: {code}, HMAC Validated Successfully.")
 
-    # Exchange the authorization code for an access token
+    # ✅ Exchange the authorization code for an access token
     token_url = f"https://{shop}/admin/oauth/access_token"
     try:
         response = requests.post(token_url, json={
             "client_id": SHOPIFY_API_KEY,
             "client_secret": SHOPIFY_SECRET,
             "code": code
-        }, timeout=10)  # Set timeout for request
-
-        response.raise_for_status()  # Raise an error if response code is not 2xx
+        }, timeout=10)
+        response.raise_for_status()
         token_data = response.json()
         access_token = token_data.get("access_token")
 
@@ -338,7 +335,7 @@ def oauth_callback():
         print(f"[ERROR] Token Exchange Request Failed: {str(e)}")
         return redirect(url_for("profile"))
 
-    # Retrieve store information including email
+    # ✅ Retrieve store information including email
     headers = {"X-Shopify-Access-Token": access_token}
     shop_info_url = f"https://{shop}/admin/api/2023-01/shop.json"
 
@@ -346,41 +343,29 @@ def oauth_callback():
         shop_response = requests.get(shop_info_url, headers=headers, timeout=10)
         shop_response.raise_for_status()
         shop_data = shop_response.json()
-        email = shop_data.get("shop", {}).get("email", f"no-email-{shop}")  # Fallback to avoid null values
-        print(f"[DEBUG] Retrieved Shop Email: {email}")
+        email = shop_data.get("shop", {}).get("email", f"no-email-{shop}")  
 
     except requests.RequestException as e:
         email = f"no-email-{shop}"
         print(f"[ERROR] Failed to fetch store details from Shopify: {str(e)}")
 
-    # Store or update user in the database
+    # ✅ Store or update user in the database
     with app.app_context():
-        user = User.query.filter(
-            (User.shopify_domain == shop) | (User.email == email)
-        ).first()
-
+        user = User.query.filter((User.shopify_domain == shop) | (User.email == email)).with_for_update().first()
         if user:
             user.access_token = access_token
-            db.session.commit()
-            print(f"[DEBUG] Updated User: {user.email}, Access Token: {user.access_token}")
         else:
-            print(f"[DEBUG] Creating new user: {email}")
-            user = User(
-                email=email,
-                shopify_domain=shop,
-                access_token=access_token
-            )
+            user = User(email=email, shopify_domain=shop, access_token=access_token)
             db.session.add(user)
-            db.session.commit()
-            print(f"[DEBUG] Created User: {email}, Shopify Domain: {shop}")
+        db.session.commit()
 
-    # Store session details for the user
+    # ✅ Secure session storage
     session["shop"] = shop
     session["access_token"] = access_token
+    session.modified = True
 
-    flash("Shopify OAuth successful! Your store is now connected.", "success")
+    flash("Shopify OAuth successful!", "success")
     return redirect(url_for("inventory"))
-
 
 
 
