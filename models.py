@@ -10,7 +10,6 @@ from app import db
 class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False)
     openai_api_key = db.Column(db.String(256), nullable=True)
     ftp_host = db.Column(db.String(256), nullable=True)  # Add this line
     ftp_user = db.Column(db.String(256), nullable=True)  # Add this line
