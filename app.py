@@ -28,6 +28,8 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import DataRequired, Email, EqualTo
 from authlib.integrations.flask_client import OAuth
+import hmac
+import hashlib
 
 # ✅ Initialize Flask App
 app = Flask(__name__)
