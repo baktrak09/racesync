@@ -329,6 +329,9 @@ def oauth_callback():
         token_data = response.json()
         access_token = token_data.get("access_token")
 
+        print(f"[DEBUG] Before Redirect - Shopify Domain: {session.get('shop')}, Access Token: {session.get('access_token')}")
+
+
         if not access_token:
             flash("OAuth failed! Shopify did not return an access token.", "danger")
             print("[ERROR] Shopify did not return an access token.")
