@@ -41,7 +41,8 @@ if DATABASE_URL:
 else:
     basedir = os.path.abspath(os.path.dirname(__file__))
     DATABASE_PATH = os.path.join(basedir, "instance", "app.db")
-    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DATABASE_PATH}"  # Local Testing
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///Racesyncapp.db"
+
 
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SESSION_PERMANENT"] = False
