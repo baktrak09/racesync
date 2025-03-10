@@ -354,22 +354,22 @@ def oauth_callback():
         print(f"[ERROR] Failed to fetch store details from Shopify: {str(e)}")
 
     # ✅ Store or Update User in Database
-    with app.app_context():
-        user = User.query.filter(
-            (User.shopify_domain == shop) | (User.email == email)
-        ).first()
+    # ✅ Store or Update User in Database
+        with app.app_context():
+            user = User.query.filter_by(shopify_domain=shop).first()  # Only match by shopify_domain
 
-        if user:
-            print(f"[DEBUG] Updating existing user: {user.email}")
-            user.access_token = access_token
-        else:
-            print(f"[DEBUG] Creating new user: {email}")
-            user = User(
-                email=email,
-                shopify_domain=shop,
-                access_token=access_token
-            )
-            db.session.add(user)
+            if user:
+                print(f"[DEBUG] Updating existing user: {user.email}")
+                user.access_token = access_token
+            else:
+                print(f"[DEBUG] Creating new user for Shopify Domain: {shop}")
+                user = User(
+                    email="unknown@domain.com",  # Set a placeholder if needed
+                    shopify_domain=shop,
+                    access_token=access_token
+                )
+                db.session.add(user)
+
 
         try:
             db.session.commit()
