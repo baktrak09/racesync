@@ -286,7 +286,6 @@ def oauth_start():
 def oauth_callback():
     print(f"[DEBUG] OAuth Params: {request.args}")
 
-    # ✅ Extract required parameters
     shop = request.args.get("shop")
     code = request.args.get("code")
     received_hmac = request.args.get("hmac")
@@ -296,18 +295,16 @@ def oauth_callback():
         print("[ERROR] Missing required OAuth parameters.")
         return redirect(url_for("profile"))
 
-    # ✅ Load Shopify API credentials from environment variables
     SHOPIFY_API_KEY = os.getenv("SHOPIFY_API_KEY")
     SHOPIFY_SECRET = os.getenv("SHOPIFY_SECRET")
 
     if not SHOPIFY_API_KEY or not SHOPIFY_SECRET:
         flash("OAuth failed! Missing API credentials.", "danger")
-        print("[ERROR] Missing API credentials from environment variables.")
+        print("[ERROR] Missing API credentials.")
         return redirect(url_for("profile"))
 
-    # ✅ Verify HMAC (Shopify request validation)
     params = request.args.to_dict(flat=False)
-    params.pop("hmac", None)  # Remove HMAC before validation
+    params.pop("hmac", None)
     sorted_params = "&".join(f"{key}={','.join(value)}" for key, value in sorted(params.items()))
     calculated_hmac = hmac.new(SHOPIFY_SECRET.encode("utf-8"), sorted_params.encode("utf-8"), hashlib.sha256).hexdigest()
 
@@ -351,7 +348,7 @@ def oauth_callback():
         shop_response = requests.get(shop_info_url, headers=headers, timeout=10)
         shop_response.raise_for_status()
         shop_data = shop_response.json()
-        email = shop_data.get("shop", {}).get("email", f"no-email-{shop}")  # Fallback to prevent NULL values
+        email = shop_data.get("shop", {}).get("email", f"no-email-{shop}")
         print(f"[DEBUG] Retrieved Shop Email: {email}")
 
     except requests.RequestException as e:
@@ -368,7 +365,7 @@ def oauth_callback():
         else:
             print(f"[DEBUG] Creating new user for Shopify Domain: {shop}")
             user = User(
-                email=email,  # Assign fetched email
+                email=email,
                 shopify_domain=shop,
                 access_token=access_token
             )
@@ -386,12 +383,13 @@ def oauth_callback():
     # ✅ Store Access Token in Session
     session["shop"] = shop
     session["access_token"] = access_token
-    session.modified = True  # Ensures session data is stored
+    session.modified = True  # ✅ Forces Flask to save session changes
 
     print(f"[DEBUG] Session Updated - Shopify Domain: {session.get('shop')}, Access Token: {session.get('access_token')}")
 
     flash("Shopify OAuth successful! Your store is now connected.", "success")
     return redirect(url_for("inventory"))
+
 
 
 
