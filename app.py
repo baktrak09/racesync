@@ -52,7 +52,6 @@ app.config["SESSION_FILE_DIR"] = "./flask_session"  # Ensures session data is sa
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "your_secret_key")
 app.config["SESSION_COOKIE_SECURE"] = True  # Ensures cookies work over HTTPS
 
-Session(app)
 
 
 # ✅ Initialize Extensions
@@ -287,6 +286,7 @@ def oauth_start():
 def oauth_callback():
     print(f"[DEBUG] OAuth Params: {request.args}")
 
+    # ✅ Extract required parameters
     shop = request.args.get("shop")
     code = request.args.get("code")
     received_hmac = request.args.get("hmac")
@@ -331,11 +331,6 @@ def oauth_callback():
         token_data = response.json()
         access_token = token_data.get("access_token")
 
-        print(f"[DEBUG] Before Redirect - Shopify Domain: {session.get('shop')}, Access Token: {session.get('access_token')}")
-        session.modified = True
-        db.session.commit()  # Ensure user data is saved before redirect
-
-
         if not access_token:
             flash("OAuth failed! Shopify did not return an access token.", "danger")
             print("[ERROR] Shopify did not return an access token.")
@@ -364,22 +359,20 @@ def oauth_callback():
         print(f"[ERROR] Failed to fetch store details from Shopify: {str(e)}")
 
     # ✅ Store or Update User in Database
-    # ✅ Store or Update User in Database
-        with app.app_context():
-            user = User.query.filter_by(shopify_domain=shop).first()  # Only match by shopify_domain
+    with app.app_context():
+        user = User.query.filter_by(shopify_domain=shop).first()
 
-            if user:
-                print(f"[DEBUG] Updating existing user: {user.email}")
-                user.access_token = access_token
-            else:
-                print(f"[DEBUG] Creating new user for Shopify Domain: {shop}")
-                user = User(
-                    email="unknown@domain.com",  # Set a placeholder if needed
-                    shopify_domain=shop,
-                    access_token=access_token
-                )
-                db.session.add(user)
-
+        if user:
+            print(f"[DEBUG] Updating existing user: {user.email}")
+            user.access_token = access_token
+        else:
+            print(f"[DEBUG] Creating new user for Shopify Domain: {shop}")
+            user = User(
+                email=email,  # Assign fetched email
+                shopify_domain=shop,
+                access_token=access_token
+            )
+            db.session.add(user)
 
         try:
             db.session.commit()
@@ -393,6 +386,8 @@ def oauth_callback():
     # ✅ Store Access Token in Session
     session["shop"] = shop
     session["access_token"] = access_token
+    session.modified = True  # Ensures session data is stored
+
     print(f"[DEBUG] Session Updated - Shopify Domain: {session.get('shop')}, Access Token: {session.get('access_token')}")
 
     flash("Shopify OAuth successful! Your store is now connected.", "success")
