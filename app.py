@@ -44,14 +44,13 @@ else:
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///Racesyncapp.db"
 
 
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SESSION_PERMANENT"] = True
 app.config["SESSION_TYPE"] = "filesystem"
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=20)
-app.config["SESSION_FILE_DIR"] = "./flask_session"  # Ensures session data is saved
+app.config["SESSION_FILE_DIR"] = os.path.join(os.getcwd(), "flask_session")  # Absolute path
+app.config["SESSION_PERMANENT"] = True  # Keeps sessions longer
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)  # 7 days session persistence
+app.config["SESSION_USE_SIGNER"] = True  # Protects session data
+app.config["SESSION_KEY_PREFIX"] = "racesync_"  # Prevents conflicts
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "your_secret_key")
-app.config["SESSION_COOKIE_SECURE"] = True  # Ensures cookies work over HTTPS
-
 
 
 # ✅ Initialize Extensions
