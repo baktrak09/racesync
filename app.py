@@ -50,6 +50,8 @@ app.config["SESSION_TYPE"] = "filesystem"
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=20)
 app.config["SESSION_FILE_DIR"] = "./flask_session"  # Ensures session data is saved
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "your_secret_key")
+app.config["SESSION_COOKIE_SECURE"] = True  # Ensures cookies work over HTTPS
+
 Session(app)
 
 
@@ -330,6 +332,8 @@ def oauth_callback():
         access_token = token_data.get("access_token")
 
         print(f"[DEBUG] Before Redirect - Shopify Domain: {session.get('shop')}, Access Token: {session.get('access_token')}")
+        session.modified = True
+        db.session.commit()  # Ensure user data is saved before redirect
 
 
         if not access_token:
