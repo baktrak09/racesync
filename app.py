@@ -30,6 +30,10 @@ from wtforms.validators import DataRequired, Email, EqualTo
 from authlib.integrations.flask_client import OAuth
 import hmac
 import hashlib
+import redis
+
+
+
 
 # ✅ Initialize Flask App
 app = Flask(__name__)
@@ -44,12 +48,12 @@ else:
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///Racesyncapp.db"
 
 
-app.config["SESSION_TYPE"] = "filesystem"
-app.config["SESSION_FILE_DIR"] = os.path.join(os.getcwd(), "flask_session")  # Absolute path
-app.config["SESSION_PERMANENT"] = True  # Keeps sessions longer
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)  # 7 days session persistence
-app.config["SESSION_USE_SIGNER"] = True  # Protects session data
+# ✅ Configure Flask-Session with Redis
+app.config["SESSION_TYPE"] = "redis"
+app.config["SESSION_PERMANENT"] = True
+app.config["SESSION_USE_SIGNER"] = True  # Secures session cookies
 app.config["SESSION_KEY_PREFIX"] = "racesync_"  # Prevents conflicts
+app.config["SESSION_REDIS"] = redis.StrictRedis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"))
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "your_secret_key")
 
 
@@ -2337,7 +2341,7 @@ def generate_seo_description(product_id):
     - **Current Description:** {description}
 
     **Final Output Rules:**
-    - **MUST BE a full, natural sentence (no trailing off).**
+    - a full, natural sentence (no trailing off).**
     - **NO quotation marks or unnecessary punctuation.**
     """
 
