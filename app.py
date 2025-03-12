@@ -54,6 +54,7 @@ app.config["SESSION_PERMANENT"] = True
 app.config["SESSION_USE_SIGNER"] = True  # Extra security
 app.config["SESSION_KEY_PREFIX"] = "racesync_"  # Prefix to prevent collisions
 app.config["SESSION_REDIS"] = redis.StrictRedis.from_url(redis_url, decode_responses=True)
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("SQLALCHEMY_DATABASE_URI")
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "your_secret_key")
 
 
