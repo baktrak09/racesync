@@ -38,22 +38,22 @@ import redis
 # ✅ Initialize Flask App
 app = Flask(__name__)
 
-# ✅ Configure Database (PostgreSQL for Production, SQLite for Local Testing)
-DATABASE_URL = os.getenv("DATABASE_URL")
-if DATABASE_URL:
-    app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL  # Production
-else:
-    basedir = os.path.abspath(os.path.dirname(__file__))
-    DATABASE_PATH = os.path.join(basedir, "instance", "app.db")
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///Racesyncapp.db"
+# Ensure REDIS_URL is fetched properly from environment variables
+redis_url = os.getenv("REDIS_URL", "")
 
+if not redis_url:
+    raise ValueError("REDIS_URL is not set in environment variables!")
 
-# ✅ Configure Flask-Session with Redis
+# Ensure the URL uses secure `rediss://`
+if redis_url.startswith("redis://"):
+    redis_url = redis_url.replace("redis://", "rediss://", 1)
+
+# Configure Flask-Session with Redis
 app.config["SESSION_TYPE"] = "redis"
 app.config["SESSION_PERMANENT"] = True
-app.config["SESSION_USE_SIGNER"] = True  # Secures session cookies
-app.config["SESSION_KEY_PREFIX"] = "racesync_"  # Prevents conflicts
-app.config["SESSION_REDIS"] = redis.StrictRedis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"))
+app.config["SESSION_USE_SIGNER"] = True  # Extra security
+app.config["SESSION_KEY_PREFIX"] = "racesync_"  # Prefix to prevent collisions
+app.config["SESSION_REDIS"] = redis.StrictRedis.from_url(redis_url, decode_responses=True)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "your_secret_key")
 
 
