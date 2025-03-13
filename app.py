@@ -38,23 +38,15 @@ import redis
 # ✅ Initialize Flask App
 app = Flask(__name__)
 
-# Ensure REDIS_URL is fetched properly from environment variables
-redis_url = os.getenv("REDIS_URL", "")
+# Set Redis URL from environment variables
+redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")  # Fallback to localhost for debugging
 
-if not redis_url:
-    raise ValueError("REDIS_URL is not set in environment variables!")
-
-# Ensure the URL uses secure `rediss://`
-if redis_url.startswith("redis://"):
-    redis_url = redis_url.replace("redis://", "rediss://", 1)
-
-# Configure Flask-Session with Redis
+# Configure Flask-Session to use Redis
 app.config["SESSION_TYPE"] = "redis"
-app.config["SESSION_PERMANENT"] = True
-app.config["SESSION_USE_SIGNER"] = True  # Extra security
-app.config["SESSION_KEY_PREFIX"] = "racesync_"  # Prefix to prevent collisions
-app.config["SESSION_REDIS"] = redis.StrictRedis.from_url(redis_url, decode_responses=True)
-app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("SQLALCHEMY_DATABASE_URI")
+app.config["SESSION_PERMANENT"] = False
+app.config["SESSION_USE_SIGNER"] = True
+app.config["SESSION_KEY_PREFIX"] = "racesync:"
+app.config["SESSION_REDIS"] = redis.StrictRedis.from_url(redis_url)  # No SSL needed
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "your_secret_key")
 
 
