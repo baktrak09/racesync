@@ -51,15 +51,14 @@ if not redis_url:
     raise ValueError("❌ ERROR: REDIS_URL is NOT set!")
 redis_url = redis_url.replace("rediss://", "redis://")  # Convert if necessary
 
-# **Fix Redis Encoding Issue**
-redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True)
+# **Force Redis to use UTF-8**
+redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True, encoding="utf-8", encoding_errors="replace")
 
-# Configure Flask-Session with Redis
 app.config["SESSION_TYPE"] = "redis"
 app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_USE_SIGNER"] = True
 app.config["SESSION_KEY_PREFIX"] = "racesync:"
-app.config["SESSION_REDIS"] = redis.StrictRedis.from_url(redis_url, decode_responses=True)
+app.config["SESSION_REDIS"] = redis_client  # Use properly configured Redis instance
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "your_secret_key")
 
 
