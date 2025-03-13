@@ -38,15 +38,21 @@ import redis
 # ✅ Initialize Flask App
 app = Flask(__name__)
 
-# 🔍 Debugging: Check if environment variables are loaded
+# Load environment variables
 db_url = os.getenv("SQLALCHEMY_DATABASE_URI")
 redis_url = os.getenv("REDIS_URL")
 
-# Ensure database URL is set
 if not db_url:
-    raise ValueError("❌ ERROR: SQLALCHEMY_DATABASE_URI is NOT set! Check your environment variables.")
+    raise ValueError("❌ ERROR: SQLALCHEMY_DATABASE_URI is NOT set!")
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+if not redis_url:
+    raise ValueError("❌ ERROR: REDIS_URL is NOT set!")
+redis_url = redis_url.replace("rediss://", "redis://")  # Convert if necessary
+
+# **Fix Redis Encoding Issue**
+redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True)
 
 # Configure Flask-Session with Redis
 app.config["SESSION_TYPE"] = "redis"
