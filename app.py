@@ -38,12 +38,15 @@ import redis
 # ✅ Initialize Flask App
 app = Flask(__name__)
 
-# Retrieve Redis URL from environment variable
-redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+# 🔍 Debugging: Check if environment variables are loaded
+db_url = os.getenv("SQLALCHEMY_DATABASE_URI")
+redis_url = os.getenv("REDIS_URL")
 
-# Ensure Redis URL starts with the correct scheme
-if not redis_url.startswith(("redis://", "rediss://")):
-    raise ValueError(f"Invalid Redis URL: {redis_url}")
+# Ensure database URL is set
+if not db_url:
+    raise ValueError("❌ ERROR: SQLALCHEMY_DATABASE_URI is NOT set! Check your environment variables.")
+app.config["SQLALCHEMY_DATABASE_URI"] = db_url
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 # Configure Flask-Session with Redis
 app.config["SESSION_TYPE"] = "redis"
@@ -62,6 +65,11 @@ login_manager = LoginManager(app)
 login_manager.login_view = "login"
 Session(app)
 oauth = OAuth(app)
+
+# Debugging Output
+print(f"🔍 [DEBUG] SQLALCHEMY_DATABASE_URI = {db_url}")
+print(f"🔍 [DEBUG] REDIS_URL = {redis_url}")
+
 
 # ✅ Import Models AFTER `db` is initialized
 from models import User, Setting
