@@ -2055,9 +2055,9 @@ def update_shopify_data():
     print(f"[INFO] Updating Shopify data for {shop}...")
 
     # ✅ Fetch fresh data from Shopify
-    fresh_product_types = fetch_product_types(shop)
-    fresh_vendors = fetch_vendors(shop)
-    fresh_collections = fetch_collections(shop)
+    fresh_product_types = fetch_product_types(shop, access_token)
+    fresh_vendors = fetch_vendors(shop, access_token)
+    fresh_collections = fetch_collections(shop, access_token)
 
     # ✅ Update cache
     cache = load_cache()
