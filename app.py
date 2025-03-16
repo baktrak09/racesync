@@ -1879,54 +1879,40 @@ def fetch_product_types(shop):
         return []
 
 
-def fetch_vendors(shop):
-    """Fetch all unique vendors from Shopify with pagination and rate limit handling."""
-    try:
-        headers = get_shopify_headers(shop)
-        vendors = set()
+import time
+import requests
 
-        shop = shop.replace("https://", "").replace("http://", "")
-        url = f"https://{shop}/admin/api/2024-01/products.json?limit=250&fields=vendor"
+def fetch_vendors(shopify_domain, access_token):
+    url = f"https://{shopify_domain}/admin/api/2024-01/products.json?limit=100&fields=vendor"
+    headers = {"X-Shopify-Access-Token": access_token}
+    vendors = set()
+    next_page_info = None
 
-        while url:
-            print(f"[DEBUG] Fetching vendors from {url}")
-            response = requests.get(url, headers=headers)
+    while True:
+        if next_page_info:
+            url += f"&page_info={next_page_info}"
+        
+        response = requests.get(url, headers=headers)
+        if response.status_code != 200:
+            print(f"Error fetching vendors: {response.text}")
+            break
 
-            # ✅ Handle Rate Limiting (429 error)
-            if response.status_code == 429:
-                retry_after = int(response.headers.get("Retry-After", "2"))
-                print(f"[WARNING] Shopify API rate limit hit (vendors). Retrying after {retry_after} seconds...")
-                time.sleep(retry_after)
-                continue  
+        data = response.json()
+        if "products" in data:
+            vendors.update([p["vendor"] for p in data["products"] if "vendor" in p])
+        
+        # Shopify pagination
+        next_page_info = response.headers.get("Link")
+        if next_page_info:
+            next_page_info = next_page_info.split(';')[0].strip('<>')
+        else:
+            break  # Stop loop if no more pages
 
-            response.raise_for_status()
-            data = response.json()
+        time.sleep(0.5)  # Prevent hitting rate limits
 
-            # ✅ Collect unique vendors
-            for product in data.get("products", []):
-                vendor_name = product.get("vendor", "").strip()
-                if vendor_name:
-                    vendors.add(vendor_name)
+    return sorted(list(vendors))
 
-            # ✅ STOP PAGINATION WHEN THERE IS NO "NEXT" LINK
-            link_header = response.headers.get("Link")
-            if link_header:
-                next_url = None
-                for link in link_header.split(","):
-                    if 'rel="next"' in link:
-                        next_url = link.split(";")[0].strip("<> ")
-                        break  
-                url = next_url  
-            else:
-                url = None  
 
-        sorted_vendors = sorted(vendors)
-        print(f"[DEBUG] Final Vendors Retrieved for {shop}: {sorted_vendors}")
-        return sorted_vendors
-
-    except requests.exceptions.RequestException as e:
-        print(f"[ERROR] Failed to fetch vendors for {shop}: {e}")
-        return []
 
 
 def fetch_collections(shop):
