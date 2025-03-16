@@ -31,7 +31,7 @@ from authlib.integrations.flask_client import OAuth
 import hmac
 import hashlib
 import redis
-
+import traceback
 
 
 
@@ -57,8 +57,8 @@ redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True, enco
 app.config["SESSION_TYPE"] = "redis"
 app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_USE_SIGNER"] = True
-app.config["SESSION_KEY_PREFIX"] = "racesync:"
-app.config["SESSION_REDIS"] = redis_client  # Use properly configured Redis instance
+app.config['SESSION_KEY_PREFIX'] = 'racesync_session:'
+app.config['SESSION_REDIS'] = redis.StrictRedis.from_url("redis://red-cv8ebklumphs73cnp96g:6379", decode_responses=False)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "your_secret_key")
 
 
@@ -130,28 +130,39 @@ SHOPIFY_ACCESS_TOKEN = None
 def load_user_credentials():
     global shopify_domain, SHOPIFY_ACCESS_TOKEN
 
-    # Allow static files to load without interruption
-    if request.path.startswith('/static/'):
-        return  
+    try:
+        # Allow static files to load without interruption
+        if request.path.startswith('/static/'):
+            return  
 
-    # Routes allowed without Shopify credentials
-    allowed_routes = ["profile", "logout", "oauth_start", "oauth_callback", "register", "login"]
-    if request.endpoint in allowed_routes:
-        return
+        # Ensure session is properly initialized to avoid "NoneType" errors
+        if session is None:
+            session.modified = True
 
-    if current_user.is_authenticated:
-        # Fetch user-specific credentials
-        user_creds = get_user_credentials(current_user.id)
-        shopify_domain = user_creds.get("shopify_domain", "")
-        SHOPIFY_ACCESS_TOKEN = user_creds.get("shopify_access_token", "")
+        # Routes allowed without Shopify credentials
+        allowed_routes = {"profile", "logout", "oauth_start", "oauth_callback", "register", "login"}
+        if request.endpoint and request.endpoint in allowed_routes:
+            return
 
-        print(f"[DEBUG] Shopify Domain: {shopify_domain}, Access Token: {SHOPIFY_ACCESS_TOKEN}")
+        if current_user.is_authenticated:
+            # Fetch user-specific credentials
+            user_creds = get_user_credentials(current_user.id) or {}
 
-        # If credentials are missing, redirect to the profile page
-        if not shopify_domain or not SHOPIFY_ACCESS_TOKEN:
-            flash("Please connect your Shopify store in your profile.", "warning")
-            return redirect(url_for("profile"))
+            shopify_domain = user_creds.get("shopify_domain", "")
+            SHOPIFY_ACCESS_TOKEN = user_creds.get("shopify_access_token", "")
 
+            print(f"[DEBUG] Shopify Domain: {shopify_domain}, Access Token: {SHOPIFY_ACCESS_TOKEN}")
+
+            # If credentials are missing, redirect to the profile page
+            if not shopify_domain or not SHOPIFY_ACCESS_TOKEN:
+                flash("Please connect your Shopify store in your profile.", "warning")
+                return redirect(url_for("profile"))
+
+    except Exception as e:
+        print("[ERROR] Exception in load_user_credentials:", str(e))
+        traceback.print_exc()
+        flash("An error occurred while loading user credentials.", "danger")
+        return redirect(url_for("logout"))  # Redirect to logout or an error page if something goes wrong
 
 
 
