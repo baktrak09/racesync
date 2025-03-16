@@ -44,9 +44,10 @@ if not db_url:
 
 # ✅ Adjust SSL settings
 if "?sslmode=" in db_url:
-    db_url = db_url.replace("?sslmode=require", "?sslmode=prefer")
+    db_url = db_url.replace("?sslmode=prefer", "?sslmode=require")
 else:
-    db_url += "?sslmode=prefer"
+    db_url += "?sslmode=require"
+
 
 # ✅ Add Connection Pooling to Reduce Load
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
@@ -160,47 +161,49 @@ def load_user_credentials():
     global shopify_domain, SHOPIFY_ACCESS_TOKEN
 
     try:
-        # Allow static files to load without interruption
+        # Allow static files to load without modifying session
         if request.path.startswith('/static/'):
             return  
 
-        # Ensure session is properly initialized to avoid "NoneType" errors
-        if session.get("_id") is None:
+        # Ensure session is properly initialized
+        if "_id" not in session:
+            session["_id"] = os.urandom(16).hex()
             session.modified = True
 
-        # Routes that don't require Shopify credentials
+        # Allow login, profile, and auth routes without forcing Shopify check
         allowed_routes = {"profile", "logout", "oauth_start", "oauth_callback", "register", "login"}
-        if request.endpoint and request.endpoint in allowed_routes:
+        if request.endpoint in allowed_routes:
             return
 
-        # Ensure `current_user` is properly loaded before checking authentication
-        if not hasattr(current_user, "is_authenticated"):
-            print("[ERROR] Flask-Login `current_user` is not properly loaded.")
+        # Ensure `current_user` is loaded correctly
+        if not hasattr(current_user, "is_authenticated") or not current_user.is_authenticated:
+            flash("You must be logged in to access this page.", "danger")
             return redirect(url_for("login"))
 
-        if current_user.is_authenticated:
-            # Fetch user-specific credentials safely
-            user_creds = get_user_credentials(current_user.id) or {}
+        # Fetch Shopify credentials (Try session first, then DB)
+        shopify_domain = session.get("shopify_domain", get_shopify_domain(current_user.id))
+        SHOPIFY_ACCESS_TOKEN = session.get("shopify_token", get_shopify_access_token(current_user.id))
 
-            if not user_creds:
-                print(f"[WARNING] No credentials found for user {current_user.id}")
-                return redirect(url_for("profile"))
+        # Store them in session if they were fetched from DB
+        if shopify_domain and not session.get("shopify_domain"):
+            session["shopify_domain"] = shopify_domain
+        if SHOPIFY_ACCESS_TOKEN and not session.get("shopify_token"):
+            session["shopify_token"] = SHOPIFY_ACCESS_TOKEN
+        session.modified = True  # Ensure session saves
 
-            shopify_domain = user_creds.get("shopify_domain", "")
-            SHOPIFY_ACCESS_TOKEN = user_creds.get("shopify_access_token", "")
+        print(f"✅ [DEBUG] Shopify Domain: {shopify_domain}, Access Token: {SHOPIFY_ACCESS_TOKEN}")
 
-            print(f"[DEBUG] Shopify Domain: {shopify_domain}, Access Token: {SHOPIFY_ACCESS_TOKEN}")
-
-            # If credentials are missing, redirect to the profile page
-            if not shopify_domain or not SHOPIFY_ACCESS_TOKEN:
-                flash("Please connect your Shopify store in your profile.", "warning")
-                return redirect(url_for("profile"))
+        # If credentials are missing, redirect to profile
+        if not shopify_domain or not SHOPIFY_ACCESS_TOKEN:
+            flash("Please connect your Shopify store in your profile.", "warning")
+            return redirect(url_for("profile"))
 
     except Exception as e:
         print("[ERROR] Exception in load_user_credentials:", str(e))
         traceback.print_exc()
         flash("An error occurred while loading user credentials.", "danger")
         return redirect(url_for("logout"))
+
 
 
 
@@ -978,19 +981,30 @@ def dashboard():
 @app.route("/inventory/")
 @login_required
 def inventory():
+    # Prioritize session data first, then fallback to DB
     shopify_domain = session.get("shopify_domain", get_shopify_domain(current_user.id))
     shopify_token = session.get("shopify_token", get_shopify_access_token(current_user.id))
+
+    # Store values back in session if fetched from DB
+    if shopify_domain and not session.get("shopify_domain"):
+        session["shopify_domain"] = shopify_domain
+    if shopify_token and not session.get("shopify_token"):
+        session["shopify_token"] = shopify_token
+    session.modified = True  # Ensure session saves updates
 
     if not shopify_domain or not shopify_token:
         flash("Please connect your Shopify store before accessing inventory.", "warning")
         return redirect(url_for("profile"))
 
-    print("📌 Shopify Token in Session:", session.get("shopify_token"))
+    # Debugging logs
+    print(f"✅ [DEBUG] Shopify Domain: {shopify_domain}")
+    print(f"✅ [DEBUG] Session Shopify Token: {session.get('shopify_token')}")
 
-    # Proceed with Shopify API calls only if credentials exist
+    # Fetch Shopify location ID
     location_id = get_shopify_location_id(shopify_domain, shopify_token)
 
     return render_template("inventory.html", location_id=location_id)
+
 
 
 
