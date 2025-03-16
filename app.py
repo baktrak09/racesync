@@ -39,12 +39,13 @@ app = Flask(__name__)
 # ✅ Load Environment Variables
 
 db_url = os.getenv("SQLALCHEMY_DATABASE_URI")
-
 if not db_url:
     raise ValueError("❌ ERROR: SQLALCHEMY_DATABASE_URI is NOT set!")
 
-# Use `sslmode=prefer` instead of `require` to prevent strict SSL issues
-if "sslmode" not in db_url:
+# ✅ Fix PostgreSQL SSL issues by allowing fallback to no SSL
+if "?sslmode=" in db_url:
+    db_url = db_url.replace("?sslmode=require", "?sslmode=prefer")  # Adjust SSL mode
+else:
     db_url += "?sslmode=prefer"
 
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
