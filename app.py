@@ -442,7 +442,9 @@ def oauth_callback():
             return redirect(url_for("profile"))
 
     # ✅ Store Access Token in Session
-    session["shop"] = shop
+    session["shop"] = shopsession["shopify_access_token"] = access_token
+    print("DEBUG - Shopify Access Token Stored:", session.get("shopify_access_token"))
+
     session["access_token"] = access_token
     session.modified = True  # ✅ Forces Flask to save session changes
 
