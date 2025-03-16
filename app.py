@@ -1828,16 +1828,13 @@ def seo_audit():
     print(f"[DEBUG] SEO audit completed. Store Score: {store_score}")
     return jsonify(response)
 
-import requests
-import time
-
 def fetch_product_types(shop):
     """Fetch all unique product types from Shopify with proper pagination and rate limit handling."""
     try:
         headers = get_shopify_headers(shop)
         product_types = set()
-        
-        # ✅ Ensure the `shop` variable doesn't already include "https://"
+
+        # ✅ Ensure `shop` is formatted correctly
         shop = shop.replace("https://", "").replace("http://", "")
 
         base_url = f"https://{shop}/admin/api/2024-01/products.json?limit=250&fields=product_type"
@@ -1863,13 +1860,14 @@ def fetch_product_types(shop):
                 if product_type:
                     product_types.add(product_type)
 
-            # ✅ Handle Pagination
+            # ✅ Handle Pagination Properly
             url = None  # Reset URL
             link_header = response.headers.get("Link")
             if link_header:
                 for link in link_header.split(","):
                     if 'rel="next"' in link:
                         url = link.split(";")[0].strip("<> ")
+                        break  # ✅ Prevent infinite loop
 
         sorted_product_types = sorted(product_types)  # Sort for consistency
         print(f"[DEBUG] Final Product Types Retrieved for {shop}: {sorted_product_types}")
@@ -1886,7 +1884,7 @@ def fetch_vendors(shop):
         headers = get_shopify_headers(shop)
         vendors = set()
 
-        # ✅ Ensure the `shop` variable doesn't already include "https://"
+        # ✅ Ensure `shop` is formatted correctly
         shop = shop.replace("https://", "").replace("http://", "")
 
         base_url = f"https://{shop}/admin/api/2024-01/products.json?limit=250&fields=vendor"
@@ -1912,13 +1910,14 @@ def fetch_vendors(shop):
                 if vendor_name:
                     vendors.add(vendor_name)
 
-            # ✅ Handle Pagination
+            # ✅ Handle Pagination Properly
             url = None  # Reset URL
             link_header = response.headers.get("Link")
             if link_header:
                 for link in link_header.split(","):
                     if 'rel="next"' in link:
                         url = link.split(";")[0].strip("<> ")
+                        break  # ✅ Prevent infinite loop
 
         sorted_vendors = sorted(vendors)  # Sort for consistency
         print(f"[DEBUG] Final Vendors Retrieved for {shop}: {sorted_vendors}")
@@ -1935,7 +1934,7 @@ def fetch_collections(shop):
         headers = get_shopify_headers(shop)
         collections = set()  # Store unique collections
 
-        # ✅ Ensure the `shop` variable doesn't already include "https://"
+        # ✅ Ensure `shop` is formatted correctly
         shop = shop.replace("https://", "").replace("http://", "")
 
         for endpoint in ["custom_collections", "smart_collections"]:
@@ -1959,13 +1958,14 @@ def fetch_collections(shop):
                 # ✅ Collect collection names
                 collections.update(col["title"] for col in data.get(endpoint, []))
 
-                # ✅ Handle Pagination
+                # ✅ Handle Pagination Properly
                 url = None  # Reset URL
                 link_header = response.headers.get("Link")
                 if link_header:
                     for link in link_header.split(","):
                         if 'rel="next"' in link:
                             url = link.split(";")[0].strip("<> ")
+                            break  # ✅ Prevent infinite loop
 
         sorted_collections = sorted(collections)  # Sort for consistency
         print(f"[DEBUG] Final Collections Retrieved for {shop}: {sorted_collections}")
@@ -1974,7 +1974,6 @@ def fetch_collections(shop):
     except requests.exceptions.RequestException as e:
         print(f"[ERROR] Failed to fetch collections for {shop}: {e}")
         return []
-
 
 @app.route('/seo/')
 def home():
