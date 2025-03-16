@@ -33,34 +33,37 @@ import hashlib
 import redis
 import traceback
 
-
-
 # ✅ Initialize Flask App
 app = Flask(__name__)
 
-# Load environment variables
+# ✅ Load Environment Variables
 db_url = os.getenv("SQLALCHEMY_DATABASE_URI")
 redis_url = os.getenv("REDIS_URL")
 
 if not db_url:
     raise ValueError("❌ ERROR: SQLALCHEMY_DATABASE_URI is NOT set!")
-app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql://racesyncdb_user:RDifK7RcBFvuaaqhCQC1TZqgR94ZPNVx@dpg-cv66brbqf0us73evgrfg-a/racesyncdb?sslmode=require"
+
+# Ensure SSL is enforced for PostgreSQL
+if "sslmode" not in db_url:
+    db_url += "?sslmode=require"
+
+app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 if not redis_url:
     raise ValueError("❌ ERROR: REDIS_URL is NOT set!")
-redis_url = redis_url.replace("rediss://", "redis://")  # Convert if necessary
 
-# **Force Redis to use UTF-8**
+# ✅ Fix Redis Connection Issues
+redis_url = redis_url.replace("rediss://", "redis://")  # Ensure it's a proper Redis URL
+
 redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True, encoding="utf-8", encoding_errors="replace")
 
 app.config["SESSION_TYPE"] = "redis"
 app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_USE_SIGNER"] = True
-app.config['SESSION_KEY_PREFIX'] = 'racesync_session:'
-app.config['SESSION_REDIS'] = redis.StrictRedis.from_url("redis://red-cv8ebklumphs73cnp96g:6379", decode_responses=False)
+app.config["SESSION_KEY_PREFIX"] = "racesync_session:"
+app.config["SESSION_REDIS"] = redis.StrictRedis.from_url(redis_url, decode_responses=False)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "your_secret_key")
-
 
 # ✅ Initialize Extensions
 db = SQLAlchemy(app)
@@ -71,10 +74,9 @@ login_manager.login_view = "login"
 Session(app)
 oauth = OAuth(app)
 
-# Debugging Output
+# ✅ Debugging Output
 print(f"🔍 [DEBUG] SQLALCHEMY_DATABASE_URI = {db_url}")
 print(f"🔍 [DEBUG] REDIS_URL = {redis_url}")
-
 
 # ✅ Import Models AFTER `db` is initialized
 from models import User, Setting
@@ -98,7 +100,6 @@ def get_shopify_credentials():
         
     return credentials
 
-
 # ✅ Function to Get User-Specific Shopify & FTP Credentials
 def get_user_credentials(user_id):
     """Fetch user-specific Shopify and FTP credentials from the database."""
@@ -106,15 +107,14 @@ def get_user_credentials(user_id):
         user = User.query.filter_by(id=user_id).first()
         if not user:
             print(f"[WARNING] No user found with ID {user_id}.")
-            return None
+            return {}  # Ensures it never returns `None`
         return {
-            "shopify_domain": user.shopify_domain,
-            "shopify_access_token": user.access_token,
-            "ftp_host": user.ftp_host,
-            "ftp_user": user.ftp_user,
-            "ftp_pass": user.ftp_pass,
+            "shopify_domain": user.shopify_domain or "",
+            "shopify_access_token": user.access_token or "",
+            "ftp_host": user.ftp_host or "",
+            "ftp_user": user.ftp_user or "",
+            "ftp_pass": user.ftp_pass or "",
         }
-
 
 # ✅ Lazy-Load Shopify Credentials (Only When User is Logged In)
 SHOPIFY_CREDENTIALS = get_shopify_credentials()
@@ -126,6 +126,7 @@ SHOPIFY_SCOPES = SHOPIFY_CREDENTIALS["SHOPIFY_SCOPES"]
 shopify_domain = None
 SHOPIFY_ACCESS_TOKEN = None
 
+# ✅ Updated `before_request` to Fix Session Issues and User Credential Loading
 @app.before_request
 def load_user_credentials():
     global shopify_domain, SHOPIFY_ACCESS_TOKEN
@@ -136,17 +137,26 @@ def load_user_credentials():
             return  
 
         # Ensure session is properly initialized to avoid "NoneType" errors
-        if session is None:
+        if session.get("_id") is None:
             session.modified = True
 
-        # Routes allowed without Shopify credentials
+        # Routes that don't require Shopify credentials
         allowed_routes = {"profile", "logout", "oauth_start", "oauth_callback", "register", "login"}
         if request.endpoint and request.endpoint in allowed_routes:
             return
 
+        # Ensure `current_user` is properly loaded before checking authentication
+        if not hasattr(current_user, "is_authenticated"):
+            print("[ERROR] Flask-Login `current_user` is not properly loaded.")
+            return redirect(url_for("login"))
+
         if current_user.is_authenticated:
-            # Fetch user-specific credentials
+            # Fetch user-specific credentials safely
             user_creds = get_user_credentials(current_user.id) or {}
+
+            if not user_creds:
+                print(f"[WARNING] No credentials found for user {current_user.id}")
+                return redirect(url_for("profile"))
 
             shopify_domain = user_creds.get("shopify_domain", "")
             SHOPIFY_ACCESS_TOKEN = user_creds.get("shopify_access_token", "")
@@ -162,8 +172,7 @@ def load_user_credentials():
         print("[ERROR] Exception in load_user_credentials:", str(e))
         traceback.print_exc()
         flash("An error occurred while loading user credentials.", "danger")
-        return redirect(url_for("logout"))  # Redirect to logout or an error page if something goes wrong
-
+        return redirect(url_for("logout"))
 
 
 
