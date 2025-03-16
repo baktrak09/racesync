@@ -1829,16 +1829,18 @@ def seo_audit():
     return jsonify(response)
 
 def fetch_product_types(shop):
-    """Fetch all unique product types from Shopify and update the cache with rate limit handling."""
+    """Fetch all unique product types from Shopify with proper pagination and rate limit handling."""
     try:
         headers = get_shopify_headers(shop)
         product_types = set()
-        url = f"https://{shop}/admin/api/2024-01/products.json?limit=250&fields=product_type"
+        base_url = f"https://{shop}/admin/api/2024-01/products.json?limit=250&fields=product_type"
+        url = base_url  # Start pagination loop
 
         while url:
+            print(f"[DEBUG] Fetching product types from {url}")  # Debugging
             response = requests.get(url, headers=headers)
 
-            # ✅ Handle rate limiting (429 error)
+            # ✅ Handle Rate Limiting (429 error)
             if response.status_code == 429:
                 retry_after = int(response.headers.get("Retry-After", "2"))
                 print(f"[WARNING] Shopify API rate limit hit (product types). Retrying after {retry_after} seconds...")
@@ -1848,38 +1850,42 @@ def fetch_product_types(shop):
             response.raise_for_status()
             data = response.json()
 
+            # ✅ Collect unique product types
             for product in data.get("products", []):
-                if product.get("product_type"):
-                    product_types.add(product["product_type"])
+                product_type = product.get("product_type", "").strip()
+                if product_type:
+                    product_types.add(product_type)
 
             # ✅ Handle Pagination
-            url = None
+            url = None  # Reset URL
             link_header = response.headers.get("Link")
             if link_header:
                 for link in link_header.split(","):
                     if 'rel="next"' in link:
                         url = link.split(";")[0].strip("<> ")
 
-        print(f"[DEBUG] Final Product Types Retrieved for {shop}: {sorted(product_types)}")
-        return sorted(product_types)
+        sorted_product_types = sorted(product_types)  # Sort for consistency
+        print(f"[DEBUG] Final Product Types Retrieved for {shop}: {sorted_product_types}")
+        return sorted_product_types
 
     except requests.exceptions.RequestException as e:
         print(f"[ERROR] Failed to fetch product types for {shop}: {e}")
         return []
 
 
-
 def fetch_vendors(shop):
-    """Fetch all unique vendors from Shopify and update the cache with rate limit handling."""
+    """Fetch all unique vendors from Shopify with pagination and rate limit handling."""
     try:
         headers = get_shopify_headers(shop)
         vendors = set()
-        url = f"https://{shop}/admin/api/2024-01/products.json?limit=250&fields=vendor"
+        base_url = f"https://{shop}/admin/api/2024-01/products.json?limit=250&fields=vendor"
+        url = base_url  # Start pagination loop
 
         while url:
+            print(f"[DEBUG] Fetching vendors from {url}")  # Debugging
             response = requests.get(url, headers=headers)
 
-            # ✅ Handle rate limiting (429 error)
+            # ✅ Handle Rate Limiting (429 error)
             if response.status_code == 429:
                 retry_after = int(response.headers.get("Retry-After", "2"))
                 print(f"[WARNING] Shopify API rate limit hit (vendors). Retrying after {retry_after} seconds...")
@@ -1889,21 +1895,23 @@ def fetch_vendors(shop):
             response.raise_for_status()
             data = response.json()
 
+            # ✅ Collect unique vendors
             for product in data.get("products", []):
                 vendor_name = product.get("vendor", "").strip()
                 if vendor_name:
                     vendors.add(vendor_name)
 
             # ✅ Handle Pagination
-            url = None
+            url = None  # Reset URL
             link_header = response.headers.get("Link")
             if link_header:
                 for link in link_header.split(","):
                     if 'rel="next"' in link:
                         url = link.split(";")[0].strip("<> ")
 
-        print(f"[DEBUG] Final Vendors Retrieved for {shop}: {sorted(vendors)}")
-        return sorted(vendors)
+        sorted_vendors = sorted(vendors)  # Sort for consistency
+        print(f"[DEBUG] Final Vendors Retrieved for {shop}: {sorted_vendors}")
+        return sorted_vendors
 
     except requests.exceptions.RequestException as e:
         print(f"[ERROR] Failed to fetch vendors for {shop}: {e}")
@@ -1911,25 +1919,25 @@ def fetch_vendors(shop):
 
 
 def fetch_collections(shop):
-    """Fetch all custom and smart collections from Shopify with retry logic for rate limits and pagination."""
+    """Fetch all custom and smart collections from Shopify with proper pagination and rate limit handling."""
     try:
         headers = get_shopify_headers(shop)
         collections = set()  # Store unique collections
 
         for endpoint in ["custom_collections", "smart_collections"]:
-            url = f"https://{shop}/admin/api/2024-01/{endpoint}.json?limit=250"
+            base_url = f"https://{shop}/admin/api/2024-01/{endpoint}.json?limit=250"
+            url = base_url  # Start pagination loop
 
             while url:
-                print(f"[DEBUG] Fetching collections from {shop}: {url}")
-
+                print(f"[DEBUG] Fetching collections from {url}")  # Debugging
                 response = requests.get(url, headers=headers)
 
-                # ✅ Handle Rate Limiting (429 Error)
+                # ✅ Handle Rate Limiting (429 error)
                 if response.status_code == 429:
                     retry_after = int(response.headers.get("Retry-After", "2"))
                     print(f"[WARNING] Shopify API rate limit hit. Retrying after {retry_after} seconds...")
                     time.sleep(retry_after)
-                    continue  # Retry the request
+                    continue  # Retry request
 
                 response.raise_for_status()
                 data = response.json()
@@ -1945,15 +1953,13 @@ def fetch_collections(shop):
                         if 'rel="next"' in link:
                             url = link.split(";")[0].strip("<> ")
 
-        sorted_collections = sorted(collections)  # Sort collections alphabetically
+        sorted_collections = sorted(collections)  # Sort for consistency
         print(f"[DEBUG] Final Collections Retrieved for {shop}: {sorted_collections}")
         return sorted_collections
 
     except requests.exceptions.RequestException as e:
         print(f"[ERROR] Failed to fetch collections for {shop}: {e}")
         return []
-
-
 
 @app.route('/seo/')
 def home():
@@ -2039,9 +2045,10 @@ def save_prompt():
 @app.route('/seo/update_shopify_data')
 def update_shopify_data():
     """Fetch fresh data from Shopify and update cache when needed."""
-    shop = request.args.get("shopify_domain")  # ✅ Get shop from request
+    shop = request.args.get("shopify_domain") or session.get("shopify_domain")
 
     if not shop:
+        print("[ERROR] Missing shopify_domain parameter!")
         return jsonify({"error": "Missing shopify_domain parameter"}), 400
 
     print(f"[INFO] Updating Shopify data for {shop}...")
