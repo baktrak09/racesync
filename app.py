@@ -67,6 +67,12 @@ app.config["SESSION_USE_SIGNER"] = True
 app.config["SESSION_KEY_PREFIX"] = "racesync_session:"
 app.config["SESSION_REDIS"] = redis.StrictRedis.from_url(redis_url, decode_responses=False)
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)  # Extend session to 7 days
+# ✅ Ensure SECRET_KEY is properly set
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "fallback_secret_key")
+
+if not os.getenv("FLASK_SECRET_KEY"):
+    print("⚠️ WARNING: FLASK_SECRET_KEY is NOT set! Using fallback secret key.")
+
 
 # ✅ Initialize Extensions
 db = SQLAlchemy(app)
