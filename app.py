@@ -1946,10 +1946,21 @@ def home():
     sort_by = request.args.get('sort_by', 'title')
     page_info = request.args.get('page_info')
 
+    # ✅ Get Shopify Domain from session
+    shopify_domain = session.get("shopify_domain")
+    if not shopify_domain:
+        print("[ERROR] Missing Shopify domain in session!")
+        return redirect(url_for("login"))  # Redirect to login if missing shop info
+
     # ✅ Fetch only if products need to be updated
     products, next_page_url, previous_page_url = fetch_products_from_api(
-        limit=50, product_type=product_type, vendor=vendor,
-        collection_name=collection_name, sort_by=sort_by, page_info=page_info
+        shopify_domain,  # Pass the required Shopify domain
+        limit=50, 
+        product_type=product_type, 
+        vendor=vendor,
+        collection_name=collection_name, 
+        sort_by=sort_by, 
+        page_info=page_info
     )
 
     # ✅ Fetch Product Types, Vendors, and Collections
@@ -1966,8 +1977,6 @@ def home():
     session["cached_products"] = products
     session["next_page_url"] = next_page_url
 
-
-
     return render_template('products.html',
                            products=products,
                            next_page_url=next_page_url,
@@ -1980,8 +1989,6 @@ def home():
                            segment="product_details",
                            collection_name=collection_name,
                            sort_by=sort_by)
-
-    
 
 
 @app.route('/seo/save_prompt', methods=['POST'])
