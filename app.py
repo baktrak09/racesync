@@ -44,7 +44,7 @@ redis_url = os.getenv("REDIS_URL")
 
 if not db_url:
     raise ValueError("❌ ERROR: SQLALCHEMY_DATABASE_URI is NOT set!")
-app.config["SQLALCHEMY_DATABASE_URI"] = db_url
+app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql://racesyncdb_user:RDifK7RcBFvuaaqhCQC1TZqgR94ZPNVx@dpg-cv66brbqf0us73evgrfg-a/racesyncdb?sslmode=require"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 if not redis_url:
