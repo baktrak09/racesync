@@ -885,22 +885,30 @@ MAX_RETRIES = 5
 
 def get_shopify_location_id(shop, access_token):
     """Fetches the Shopify location ID for the given shop domain."""
+    
+    # ✅ Ensure the shop domain does not have 'https://'
+    shop = shop.replace("https://", "").replace("http://", "")
+
     headers = {
-        "X-Shopify-Access-Token": access_token,  # ✅ Use the passed token instead of current_user
+        "X-Shopify-Access-Token": access_token,
         "Content-Type": "application/json",
     }
-    url = f"https://{shop}/admin/api/2024-01/locations.json"
-    response = requests.get(url, headers=headers)
 
-    if response.status_code == 200:
+    url = f"https://{shop}/admin/api/2024-01/locations.json"
+    print(f"[DEBUG] Fetching Shopify Locations from: {url}")
+
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()  # ✅ Raises an error for non-200 responses
         locations = response.json().get("locations", [])
+        
         if locations:
             return locations[0]["id"]  # ✅ Return the first location ID
         else:
             print("[WARNING] No Shopify locations found!")
             return None
-    else:
-        print(f"[ERROR] Failed to fetch Shopify locations: {response.text}")
+    except requests.RequestException as e:
+        print(f"[ERROR] Failed to fetch Shopify locations: {str(e)}")
         return None
 
 
