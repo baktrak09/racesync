@@ -2052,26 +2052,38 @@ def update_shopify_data():
         print("[ERROR] Missing shopify_domain parameter!")
         return jsonify({"error": "Missing shopify_domain parameter"}), 400
 
+    # ✅ Fetch access_token from session or database
+    access_token = session.get("shopify_access_token") or get_access_token(shop)
+
+    if not access_token:
+        print("[ERROR] Missing Shopify access token!")
+        return jsonify({"error": "Missing Shopify access token"}), 400
+
     print(f"[INFO] Updating Shopify data for {shop}...")
 
-    # ✅ Fetch fresh data from Shopify
-    fresh_product_types = fetch_product_types(shop, access_token)
-    fresh_vendors = fetch_vendors(shop, access_token)
-    fresh_collections = fetch_collections(shop, access_token)
+    try:
+        # ✅ Fetch fresh data from Shopify
+        fresh_product_types = fetch_product_types(shop, access_token)
+        fresh_vendors = fetch_vendors(shop, access_token)
+        fresh_collections = fetch_collections(shop, access_token)
 
-    # ✅ Update cache
-    cache = load_cache()
-    cache["product_types"]["data"] = fresh_product_types
-    cache["vendors"]["data"] = fresh_vendors
-    cache["collections"]["data"] = fresh_collections
-    cache["product_types"]["timestamp"] = time.time()
-    cache["vendors"]["timestamp"] = time.time()
-    cache["collections"]["timestamp"] = time.time()
+        # ✅ Update cache
+        cache = load_cache()
+        cache["product_types"]["data"] = fresh_product_types
+        cache["vendors"]["data"] = fresh_vendors
+        cache["collections"]["data"] = fresh_collections
+        cache["product_types"]["timestamp"] = time.time()
+        cache["vendors"]["timestamp"] = time.time()
+        cache["collections"]["timestamp"] = time.time()
 
-    save_cache(cache)  # ✅ Save updated cache properly
+        save_cache(cache)  # ✅ Save updated cache properly
 
-    flash("Shopify data updated successfully!")
-    return redirect(url_for('home'))
+        flash("Shopify data updated successfully!")
+        return redirect(url_for('home'))
+
+    except Exception as e:
+        print(f"[ERROR] Exception in update_shopify_data: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/seo/update_seo_details/<product_id>', methods=['POST'])
