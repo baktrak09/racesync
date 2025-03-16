@@ -1615,26 +1615,45 @@ def get_collection_id_by_name(shop, collection_name):
 
 
 
+import requests
+import time
+
 def fetch_products_from_api(shop, limit=50, product_type=None, vendor=None, collection_name=None, sort_by="title", page_info=None):
-    print(f"[DEBUG] Fetching products for {shop} with parameters:")
+    """
+    Fetch products from Shopify API with proper URL formatting and rate-limit handling.
+
+    :param shop: Shopify domain (e.g., 'yourstore.myshopify.com')
+    :param limit: Number of products to fetch per request
+    :param product_type: Optional filter by product type
+    :param vendor: Optional filter by vendor
+    :param collection_name: Optional filter by collection name
+    :param sort_by: Sorting parameter ('title', 'price_asc', 'price_desc')
+    :param page_info: Pagination cursor for Shopify API
+    :return: Tuple (products, next_page_url, previous_page_url)
+    """
+
+    # ✅ Clean Shopify domain (Remove redundant protocol)
+    shop_domain = shop.replace("https://", "").replace("http://", "")
+
+    print(f"[DEBUG] Fetching products for {shop_domain} with parameters:")
     print(f"  Limit: {limit}, Product Type: {product_type}, Vendor: {vendor}, Collection: {collection_name}, Sort By: {sort_by}, Page Info: {page_info}")
 
-    headers = get_shopify_headers(shop)
+    headers = get_shopify_headers(shop_domain)
 
     # ✅ Handle Collection Filtering
     collection_id = None
     if collection_name:
-        collection_id = get_collection_id_by_name(shop, collection_name)
+        collection_id = get_collection_id_by_name(shop_domain, collection_name)
 
     # ✅ Base URL setup
     if collection_id:
-        url = f"https://{shop}/admin/api/2024-01/collections/{collection_id}/products.json?limit={limit}"
+        url = f"https://{shop_domain}/admin/api/2024-01/collections/{collection_id}/products.json?limit={limit}"
     else:
-        url = f"https://{shop}/admin/api/2024-01/products.json?limit={limit}"
+        url = f"https://{shop_domain}/admin/api/2024-01/products.json?limit={limit}"
 
     # ✅ Shopify Pagination Handling
     if page_info:
-        url = f"https://{shop}/admin/api/2024-01/products.json?limit={limit}&page_info={page_info}"  # No sorting when paginating
+        url = f"https://{shop_domain}/admin/api/2024-01/products.json?limit={limit}&page_info={page_info}"  # No sorting when paginating
     else:
         params = []
         if product_type:
@@ -1677,7 +1696,7 @@ def fetch_products_from_api(shop, limit=50, product_type=None, vendor=None, coll
             break  # **Exit loop if successful**
 
         except requests.exceptions.RequestException as e:
-            print(f"[ERROR] Failed to fetch products for {shop}: {e}")
+            print(f"[ERROR] Failed to fetch products for {shop_domain}: {e}")
             return [], None, None  # Ensure three return values
 
     # ✅ Extract `page_info` for pagination
