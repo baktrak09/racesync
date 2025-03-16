@@ -883,10 +883,10 @@ def get_cached_collections():
 # ✅ Fetch Shopify Data Functions
 MAX_RETRIES = 5
 
-def get_shopify_location_id(shop):
+def get_shopify_location_id(shop, access_token):
     """Fetches the Shopify location ID for the given shop domain."""
     headers = {
-        "X-Shopify-Access-Token": get_shopify_access_token(current_user.id),
+        "X-Shopify-Access-Token": access_token,  # ✅ Use the passed token instead of current_user
         "Content-Type": "application/json",
     }
     url = f"https://{shop}/admin/api/2024-01/locations.json"
@@ -902,6 +902,7 @@ def get_shopify_location_id(shop):
     else:
         print(f"[ERROR] Failed to fetch Shopify locations: {response.text}")
         return None
+
 
 
 
