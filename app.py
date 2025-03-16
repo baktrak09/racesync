@@ -37,18 +37,21 @@ import traceback
 app = Flask(__name__)
 
 # ✅ Load Environment Variables
+
 db_url = os.getenv("SQLALCHEMY_DATABASE_URI")
-redis_url = os.getenv("REDIS_URL")
 
 if not db_url:
     raise ValueError("❌ ERROR: SQLALCHEMY_DATABASE_URI is NOT set!")
 
-# Ensure SSL is enforced for PostgreSQL
+# Use `sslmode=prefer` instead of `require` to prevent strict SSL issues
 if "sslmode" not in db_url:
-    db_url += "?sslmode=require"
+    db_url += "?sslmode=prefer"
 
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+redis_url = os.getenv("REDIS_URL")
+
 
 if not redis_url:
     raise ValueError("❌ ERROR: REDIS_URL is NOT set!")
@@ -59,11 +62,11 @@ redis_url = redis_url.replace("rediss://", "redis://")  # Ensure it's a proper R
 redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True, encoding="utf-8", encoding_errors="replace")
 
 app.config["SESSION_TYPE"] = "redis"
-app.config["SESSION_PERMANENT"] = False
+app.config["SESSION_PERMANENT"] = True  # Keep sessions valid longer
 app.config["SESSION_USE_SIGNER"] = True
 app.config["SESSION_KEY_PREFIX"] = "racesync_session:"
 app.config["SESSION_REDIS"] = redis.StrictRedis.from_url(redis_url, decode_responses=False)
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "your_secret_key")
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)  # Extend session to 7 days
 
 # ✅ Initialize Extensions
 db = SQLAlchemy(app)
@@ -84,7 +87,12 @@ from models import User, Setting
 # ✅ User Loader for Flask-Login
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    """Load user from database with error handling."""
+    try:
+        return db.session.get(User, int(user_id))  # New SQLAlchemy 2.0 syntax
+    except SQLAlchemyError as e:
+        print(f"[ERROR] Database error in load_user(): {e}")
+        return None  # Prevent app crash if DB fails
 
 # ✅ Function to Get Shopify Credentials (From Render Environment)
 def get_shopify_credentials():
@@ -102,19 +110,25 @@ def get_shopify_credentials():
 
 # ✅ Function to Get User-Specific Shopify & FTP Credentials
 def get_user_credentials(user_id):
-    """Fetch user-specific Shopify and FTP credentials from the database."""
-    with app.app_context():
-        user = User.query.filter_by(id=user_id).first()
-        if not user:
-            print(f"[WARNING] No user found with ID {user_id}.")
-            return {}  # Ensures it never returns `None`
-        return {
-            "shopify_domain": user.shopify_domain or "",
-            "shopify_access_token": user.access_token or "",
-            "ftp_host": user.ftp_host or "",
-            "ftp_user": user.ftp_user or "",
-            "ftp_pass": user.ftp_pass or "",
-        }
+    """Fetch user-specific Shopify and FTP credentials from the database with error handling."""
+    try:
+        with app.app_context():
+            user = User.query.filter_by(id=user_id).first()
+            if not user:
+                print(f"[WARNING] No user found with ID {user_id}.")
+                return {}
+
+            return {
+                "shopify_domain": user.shopify_domain or "",
+                "shopify_access_token": user.access_token or "",
+                "ftp_host": user.ftp_host or "",
+                "ftp_user": user.ftp_user or "",
+                "ftp_pass": user.ftp_pass or "",
+            }
+    except SQLAlchemyError as e:
+        print(f"[ERROR] Database error in get_user_credentials(): {e}")
+        return {}  # Prevent crash
+
 
 # ✅ Lazy-Load Shopify Credentials (Only When User is Logged In)
 SHOPIFY_CREDENTIALS = get_shopify_credentials()
