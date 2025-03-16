@@ -883,6 +883,28 @@ def get_cached_collections():
 # ✅ Fetch Shopify Data Functions
 MAX_RETRIES = 5
 
+def get_shopify_location_id(shop):
+    """Fetches the Shopify location ID for the given shop domain."""
+    headers = {
+        "X-Shopify-Access-Token": get_shopify_access_token(current_user.id),
+        "Content-Type": "application/json",
+    }
+    url = f"https://{shop}/admin/api/2024-01/locations.json"
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        locations = response.json().get("locations", [])
+        if locations:
+            return locations[0]["id"]  # ✅ Return the first location ID
+        else:
+            print("[WARNING] No Shopify locations found!")
+            return None
+    else:
+        print(f"[ERROR] Failed to fetch Shopify locations: {response.text}")
+        return None
+
+
+
 def fetch_with_rate_limit(shop, url):
     """Handle Shopify API rate limits for a specific store."""
     retries = 0
@@ -1014,25 +1036,7 @@ def get_shopify_skus_api():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-def get_shopify_location_id(shop):
-    """Fetches the Shopify location ID for the given shop domain."""
-    headers = {
-        "X-Shopify-Access-Token": get_shopify_access_token(current_user.id),
-        "Content-Type": "application/json",
-    }
-    url = f"https://{shop}/admin/api/2024-01/locations.json"
-    response = requests.get(url, headers=headers)
 
-    if response.status_code == 200:
-        locations = response.json().get("locations", [])
-        if locations:
-            return locations[0]["id"]  # ✅ Return the first location ID
-        else:
-            print("[WARNING] No Shopify locations found!")
-            return None
-    else:
-        print(f"[ERROR] Failed to fetch Shopify locations: {response.text}")
-        return None
 
 
 
