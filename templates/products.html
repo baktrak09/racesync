@@ -135,11 +135,14 @@
             </form>
 
             <!-- ✅ Update Shopify Data Button -->
+            <!-- ✅ Update Shopify Data Button -->
             <form method="GET" action="{{ url_for('update_shopify_data') }}">
+                <input type="hidden" name="shopify_domain" value="{{ session.get('shopify_domain', 'd74b39-d2.myshopify.com') }}">
                 <button type="submit" style="background: red; color: white; font-weight: bold;">
                     Update Shopify Data
                 </button>
             </form>
+
             
         </div>
     </div>
