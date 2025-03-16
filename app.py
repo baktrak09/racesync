@@ -42,14 +42,21 @@ db_url = os.getenv("SQLALCHEMY_DATABASE_URI")
 if not db_url:
     raise ValueError("❌ ERROR: SQLALCHEMY_DATABASE_URI is NOT set!")
 
-# ✅ Fix PostgreSQL SSL issues by allowing fallback to no SSL
+# ✅ Adjust SSL settings
 if "?sslmode=" in db_url:
-    db_url = db_url.replace("?sslmode=require", "?sslmode=prefer")  # Adjust SSL mode
+    db_url = db_url.replace("?sslmode=require", "?sslmode=prefer")
 else:
     db_url += "?sslmode=prefer"
 
+# ✅ Add Connection Pooling to Reduce Load
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_size": 10,  # Adjust the connection pool size
+    "max_overflow": 5,  # Allow some overflow connections
+    "pool_timeout": 30,  # Wait 30s before throwing connection errors
+    "pool_recycle": 1800,  # Recycle connections every 30 minutes to avoid timeouts
+}
+
 
 redis_url = os.getenv("REDIS_URL")
 
