@@ -441,12 +441,11 @@ def oauth_callback():
             flash("OAuth failed! Could not save user data.", "danger")
             return redirect(url_for("profile"))
 
-    # ✅ Store Access Token in Session
-    session["shop"] = shopsession["shopify_access_token"] = access_token
-    print("DEBUG - Shopify Access Token Stored:", session.get("shopify_access_token"))
+    session["shopify_domain"] = current_user.shopify_domain
+    session["shopify_token"] = current_user.access_token  # Ensure this is the correct token field
+    session.modified = True  # Ensure Flask commits changes
+    print(f"[DEBUG] Stored Shopify Token in Session: {session.get('shopify_token')}")
 
-    session["access_token"] = access_token
-    session.modified = True  # ✅ Forces Flask to save session changes
 
     print(f"[DEBUG] Session Updated - Shopify Domain: {session.get('shop')}, Access Token: {session.get('access_token')}")
 
@@ -623,6 +622,7 @@ def reset_password():
 @login_required
 def profile():
     print("[DEBUG] Profile route hit!")
+    print("📌 Session Data at Profile:", session)
 
     if request.method == 'POST':
         print("[DEBUG] POST request received")
@@ -978,18 +978,17 @@ def dashboard():
 @app.route("/inventory/")
 @login_required
 def inventory():
-    shopify_domain = get_shopify_domain(current_user.id)
-    shopify_token = get_shopify_access_token(current_user.id)
+    shopify_domain = session.get("shopify_domain", get_shopify_domain(current_user.id))
+    shopify_token = session.get("shopify_token", get_shopify_access_token(current_user.id))
 
     if not shopify_domain or not shopify_token:
         flash("Please connect your Shopify store before accessing inventory.", "warning")
-        return redirect(url_for("profile"))  # ✅ Only redirect on inventory access
+        return redirect(url_for("profile"))
+
+    print("📌 Shopify Token in Session:", session.get("shopify_token"))
 
     # Proceed with Shopify API calls only if credentials exist
     location_id = get_shopify_location_id(shopify_domain, shopify_token)
-
-    print("Session Shopify Token:", session.get("shopify_token"))
-
 
     return render_template("inventory.html", location_id=location_id)
 
