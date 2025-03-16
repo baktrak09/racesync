@@ -1828,11 +1828,18 @@ def seo_audit():
     print(f"[DEBUG] SEO audit completed. Store Score: {store_score}")
     return jsonify(response)
 
+import requests
+import time
+
 def fetch_product_types(shop):
     """Fetch all unique product types from Shopify with proper pagination and rate limit handling."""
     try:
         headers = get_shopify_headers(shop)
         product_types = set()
+        
+        # ✅ Ensure the `shop` variable doesn't already include "https://"
+        shop = shop.replace("https://", "").replace("http://", "")
+
         base_url = f"https://{shop}/admin/api/2024-01/products.json?limit=250&fields=product_type"
         url = base_url  # Start pagination loop
 
@@ -1878,6 +1885,10 @@ def fetch_vendors(shop):
     try:
         headers = get_shopify_headers(shop)
         vendors = set()
+
+        # ✅ Ensure the `shop` variable doesn't already include "https://"
+        shop = shop.replace("https://", "").replace("http://", "")
+
         base_url = f"https://{shop}/admin/api/2024-01/products.json?limit=250&fields=vendor"
         url = base_url  # Start pagination loop
 
@@ -1924,6 +1935,9 @@ def fetch_collections(shop):
         headers = get_shopify_headers(shop)
         collections = set()  # Store unique collections
 
+        # ✅ Ensure the `shop` variable doesn't already include "https://"
+        shop = shop.replace("https://", "").replace("http://", "")
+
         for endpoint in ["custom_collections", "smart_collections"]:
             base_url = f"https://{shop}/admin/api/2024-01/{endpoint}.json?limit=250"
             url = base_url  # Start pagination loop
@@ -1960,6 +1974,7 @@ def fetch_collections(shop):
     except requests.exceptions.RequestException as e:
         print(f"[ERROR] Failed to fetch collections for {shop}: {e}")
         return []
+
 
 @app.route('/seo/')
 def home():
