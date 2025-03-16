@@ -1879,19 +1879,17 @@ def fetch_product_types(shop):
         return []
 
 
-import time
-import requests
-
 def fetch_vendors(shopify_domain, access_token):
-    url = f"https://{shopify_domain}/admin/api/2024-01/products.json?limit=100&fields=vendor"
+    base_url = f"https://{shopify_domain}/admin/api/2024-01/products.json?limit=100&fields=vendor"
     headers = {"X-Shopify-Access-Token": access_token}
     vendors = set()
     next_page_info = None
 
     while True:
+        url = base_url  # Reset URL on each loop
         if next_page_info:
             url += f"&page_info={next_page_info}"
-        
+
         response = requests.get(url, headers=headers)
         if response.status_code != 200:
             print(f"Error fetching vendors: {response.text}")
@@ -1900,17 +1898,18 @@ def fetch_vendors(shopify_domain, access_token):
         data = response.json()
         if "products" in data:
             vendors.update([p["vendor"] for p in data["products"] if "vendor" in p])
-        
+
         # Shopify pagination
-        next_page_info = response.headers.get("Link")
-        if next_page_info:
-            next_page_info = next_page_info.split(';')[0].strip('<>')
+        link_header = response.headers.get("Link")
+        if link_header and 'rel="next"' in link_header:
+            next_page_info = link_header.split(";")[0].strip("<>")
         else:
-            break  # Stop loop if no more pages
+            break  # No more pages
 
         time.sleep(0.5)  # Prevent hitting rate limits
 
     return sorted(list(vendors))
+
 
 
 
