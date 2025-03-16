@@ -1829,7 +1829,7 @@ def seo_audit():
     return jsonify(response)
 
 def fetch_product_types(shop):
-    """Fetch all unique product types from Shopify with proper pagination and rate limit handling."""
+    """Fetch all unique product types from Shopify with proper pagination handling."""
     try:
         headers = get_shopify_headers(shop)
         product_types = set()
@@ -1837,9 +1837,7 @@ def fetch_product_types(shop):
         # ✅ Ensure `shop` is formatted correctly
         shop = shop.replace("https://", "").replace("http://", "")
 
-        base_url = f"https://{shop}/admin/api/2024-01/products.json?limit=250&fields=product_type"
-        url = base_url  # Start pagination loop
-
+        url = f"https://{shop}/admin/api/2024-01/products.json?limit=250&fields=product_type"
         while url:
             print(f"[DEBUG] Fetching product types from {url}")  # Debugging
             response = requests.get(url, headers=headers)
@@ -1860,14 +1858,17 @@ def fetch_product_types(shop):
                 if product_type:
                     product_types.add(product_type)
 
-            # ✅ Handle Pagination Properly
-            url = None  # Reset URL
+            # ✅ STOP PAGINATION WHEN THERE IS NO "NEXT" LINK
             link_header = response.headers.get("Link")
             if link_header:
+                next_url = None
                 for link in link_header.split(","):
                     if 'rel="next"' in link:
-                        url = link.split(";")[0].strip("<> ")
+                        next_url = link.split(";")[0].strip("<> ")
                         break  # ✅ Prevent infinite loop
+                url = next_url  # Update URL if "next" exists, otherwise stop
+            else:
+                url = None  # Stop fetching if no more pages
 
         sorted_product_types = sorted(product_types)  # Sort for consistency
         print(f"[DEBUG] Final Product Types Retrieved for {shop}: {sorted_product_types}")
@@ -1884,14 +1885,11 @@ def fetch_vendors(shop):
         headers = get_shopify_headers(shop)
         vendors = set()
 
-        # ✅ Ensure `shop` is formatted correctly
         shop = shop.replace("https://", "").replace("http://", "")
-
-        base_url = f"https://{shop}/admin/api/2024-01/products.json?limit=250&fields=vendor"
-        url = base_url  # Start pagination loop
+        url = f"https://{shop}/admin/api/2024-01/products.json?limit=250&fields=vendor"
 
         while url:
-            print(f"[DEBUG] Fetching vendors from {url}")  # Debugging
+            print(f"[DEBUG] Fetching vendors from {url}")
             response = requests.get(url, headers=headers)
 
             # ✅ Handle Rate Limiting (429 error)
@@ -1899,7 +1897,7 @@ def fetch_vendors(shop):
                 retry_after = int(response.headers.get("Retry-After", "2"))
                 print(f"[WARNING] Shopify API rate limit hit (vendors). Retrying after {retry_after} seconds...")
                 time.sleep(retry_after)
-                continue  # Retry request
+                continue  
 
             response.raise_for_status()
             data = response.json()
@@ -1910,16 +1908,19 @@ def fetch_vendors(shop):
                 if vendor_name:
                     vendors.add(vendor_name)
 
-            # ✅ Handle Pagination Properly
-            url = None  # Reset URL
+            # ✅ STOP PAGINATION WHEN THERE IS NO "NEXT" LINK
             link_header = response.headers.get("Link")
             if link_header:
+                next_url = None
                 for link in link_header.split(","):
                     if 'rel="next"' in link:
-                        url = link.split(";")[0].strip("<> ")
-                        break  # ✅ Prevent infinite loop
+                        next_url = link.split(";")[0].strip("<> ")
+                        break  
+                url = next_url  
+            else:
+                url = None  
 
-        sorted_vendors = sorted(vendors)  # Sort for consistency
+        sorted_vendors = sorted(vendors)
         print(f"[DEBUG] Final Vendors Retrieved for {shop}: {sorted_vendors}")
         return sorted_vendors
 
@@ -1932,17 +1933,15 @@ def fetch_collections(shop):
     """Fetch all custom and smart collections from Shopify with proper pagination and rate limit handling."""
     try:
         headers = get_shopify_headers(shop)
-        collections = set()  # Store unique collections
+        collections = set()  
 
-        # ✅ Ensure `shop` is formatted correctly
         shop = shop.replace("https://", "").replace("http://", "")
 
         for endpoint in ["custom_collections", "smart_collections"]:
-            base_url = f"https://{shop}/admin/api/2024-01/{endpoint}.json?limit=250"
-            url = base_url  # Start pagination loop
+            url = f"https://{shop}/admin/api/2024-01/{endpoint}.json?limit=250"
 
             while url:
-                print(f"[DEBUG] Fetching collections from {url}")  # Debugging
+                print(f"[DEBUG] Fetching collections from {url}")
                 response = requests.get(url, headers=headers)
 
                 # ✅ Handle Rate Limiting (429 error)
@@ -1950,7 +1949,7 @@ def fetch_collections(shop):
                     retry_after = int(response.headers.get("Retry-After", "2"))
                     print(f"[WARNING] Shopify API rate limit hit. Retrying after {retry_after} seconds...")
                     time.sleep(retry_after)
-                    continue  # Retry request
+                    continue  
 
                 response.raise_for_status()
                 data = response.json()
@@ -1958,16 +1957,19 @@ def fetch_collections(shop):
                 # ✅ Collect collection names
                 collections.update(col["title"] for col in data.get(endpoint, []))
 
-                # ✅ Handle Pagination Properly
-                url = None  # Reset URL
+                # ✅ STOP PAGINATION WHEN THERE IS NO "NEXT" LINK
                 link_header = response.headers.get("Link")
                 if link_header:
+                    next_url = None
                     for link in link_header.split(","):
                         if 'rel="next"' in link:
-                            url = link.split(";")[0].strip("<> ")
-                            break  # ✅ Prevent infinite loop
+                            next_url = link.split(";")[0].strip("<> ")
+                            break  
+                    url = next_url  
+                else:
+                    url = None  
 
-        sorted_collections = sorted(collections)  # Sort for consistency
+        sorted_collections = sorted(collections)
         print(f"[DEBUG] Final Collections Retrieved for {shop}: {sorted_collections}")
         return sorted_collections
 
