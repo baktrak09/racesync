@@ -1879,10 +1879,17 @@ def fetch_product_types(shop):
         return []
 
 
+import requests
+import re
+import time
+
 def fetch_vendors(shopify_domain, access_token):
     """Fetch unique vendors from Shopify products with proper pagination handling and rate limits."""
     
+    # ✅ Ensure clean domain (Remove extra "https://" or "http://")
+    shopify_domain = shopify_domain.replace("https://", "").replace("http://", "")
     base_url = f"https://{shopify_domain}/admin/api/2024-01/products.json?limit=100&fields=vendor"
+    
     headers = {"X-Shopify-Access-Token": access_token}
     vendors = set()
     next_page_info = None
@@ -1890,32 +1897,47 @@ def fetch_vendors(shopify_domain, access_token):
 
     while True:
         url = base_url if not next_page_info else f"{base_url}&page_info={next_page_info}"
-        print(f"[DEBUG] Fetching: {url}")
         
-        for attempt in range(retry_attempts):
-            response = requests.get(url, headers=headers)
-            
-            # ✅ Handle Rate Limits (429)
-            if response.status_code == 429:
-                retry_after = int(response.headers.get("Retry-After", "2"))
-                wait_time = max(retry_after, 2 ** attempt)  # Exponential backoff
-                print(f"[WARNING] Rate limit hit. Retrying in {wait_time} seconds...")
-                time.sleep(wait_time)
-                continue  # Retry the request
+        # ✅ Debugging statements
+        print(f"[DEBUG] shopify_domain: {shopify_domain}")
+        print(f"[DEBUG] Fetching URL: {url}")
+        print(f"[DEBUG] next_page_info: {next_page_info}")
 
-            # ✅ Handle server errors (500, 502, 503, 504)
-            elif response.status_code in [500, 502, 503, 504]:
-                print(f"[WARNING] Server error {response.status_code}. Retrying in 5 seconds...")
-                time.sleep(5)
-                continue  # Retry request
+        for attempt in range(retry_attempts):
+            try:
+                response = requests.get(url, headers=headers)
+
+                # ✅ Handle Rate Limits (429)
+                if response.status_code == 429:
+                    retry_after = int(response.headers.get("Retry-After", "2"))
+                    wait_time = max(retry_after, 2 ** attempt)  # Exponential backoff
+                    print(f"[WARNING] Rate limit hit. Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                    continue  # Retry the request
+
+                # ✅ Handle server errors (500, 502, 503, 504)
+                elif response.status_code in [500, 502, 503, 504]:
+                    print(f"[WARNING] Server error {response.status_code}. Retrying in 5 seconds...")
+                    time.sleep(5)
+                    continue  # Retry request
+
+                response.raise_for_status()
+                break  # Successful request, exit retry loop
             
-            response.raise_for_status()
-            break  # Successful request, exit retry loop
-        
-        data = response.json()
+            except requests.exceptions.RequestException as e:
+                print(f"[ERROR] Shopify API request failed: {e}")
+                return sorted(list(vendors))  # Return whatever vendors we have so far
+
+        # ✅ Parse JSON response
+        try:
+            data = response.json()
+        except ValueError:
+            print("[ERROR] Failed to parse JSON response from Shopify API.")
+            return sorted(list(vendors))
+
         if "products" in data:
             vendors.update([p["vendor"] for p in data["products"] if "vendor" in p])
-        
+
         # ✅ Fix Pagination Issue: Extract correct "next" page_info
         link_header = response.headers.get("Link")
         if link_header:
@@ -1931,6 +1953,7 @@ def fetch_vendors(shopify_domain, access_token):
         time.sleep(0.5)  # Prevent API rate limiting
 
     return sorted(list(vendors))
+
 
 
 
@@ -1991,7 +2014,7 @@ def fetch_collections(shop):
         print(f"[ERROR] Failed to fetch collections: {e}")
         return []
     
-    
+
 
 @app.route('/seo/')
 def home():
