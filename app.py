@@ -2044,6 +2044,7 @@ def save_prompt():
 
 
 @app.route('/seo/update_shopify_data')
+@login_required
 def update_shopify_data():
     """Fetch fresh data from Shopify and update cache when needed."""
     shop = request.args.get("shopify_domain") or session.get("shopify_domain")
@@ -2052,38 +2053,39 @@ def update_shopify_data():
         print("[ERROR] Missing shopify_domain parameter!")
         return jsonify({"error": "Missing shopify_domain parameter"}), 400
 
-    # ✅ Fetch access_token from session or database
-    access_token = session.get("shopify_access_token") or get_access_token(shop)
+    # ✅ Get Access Token from Session or Database
+    access_token = session.get("shopify_access_token")
+    if not access_token:
+        access_token = get_shopify_access_token(current_user.id)  # Fetch from DB
+        if access_token:
+            session["shopify_access_token"] = access_token  # Store in session
+            session.modified = True
 
     if not access_token:
-        print("[ERROR] Missing Shopify access token!")
+        print(f"[ERROR] Missing Shopify access token for {shop}!")
         return jsonify({"error": "Missing Shopify access token"}), 400
 
     print(f"[INFO] Updating Shopify data for {shop}...")
 
-    try:
-        # ✅ Fetch fresh data from Shopify
-        fresh_product_types = fetch_product_types(shop, access_token)
-        fresh_vendors = fetch_vendors(shop, access_token)
-        fresh_collections = fetch_collections(shop, access_token)
+    # ✅ Fetch fresh data from Shopify
+    fresh_product_types = fetch_product_types(shop)
+    fresh_vendors = fetch_vendors(shop, access_token)
+    fresh_collections = fetch_collections(shop)
 
-        # ✅ Update cache
-        cache = load_cache()
-        cache["product_types"]["data"] = fresh_product_types
-        cache["vendors"]["data"] = fresh_vendors
-        cache["collections"]["data"] = fresh_collections
-        cache["product_types"]["timestamp"] = time.time()
-        cache["vendors"]["timestamp"] = time.time()
-        cache["collections"]["timestamp"] = time.time()
+    # ✅ Update cache
+    cache = load_cache()
+    cache["product_types"]["data"] = fresh_product_types
+    cache["vendors"]["data"] = fresh_vendors
+    cache["collections"]["data"] = fresh_collections
+    cache["product_types"]["timestamp"] = time.time()
+    cache["vendors"]["timestamp"] = time.time()
+    cache["collections"]["timestamp"] = time.time()
 
-        save_cache(cache)  # ✅ Save updated cache properly
+    save_cache(cache)  # ✅ Save updated cache properly
 
-        flash("Shopify data updated successfully!")
-        return redirect(url_for('home'))
+    flash("Shopify data updated successfully!")
+    return redirect(url_for('home'))
 
-    except Exception as e:
-        print(f"[ERROR] Exception in update_shopify_data: {str(e)}")
-        return jsonify({"error": str(e)}), 500
 
 
 @app.route('/seo/update_seo_details/<product_id>', methods=['POST'])
