@@ -1880,71 +1880,73 @@ def fetch_product_types(shop):
 
 
 def fetch_vendors(shopify_domain, access_token):
-    # Ensure shopify_domain is correctly formatted
-    if shopify_domain.startswith("https://"):
-        shopify_domain = shopify_domain.replace("https://", "")
+    """Fetch unique vendors from Shopify products with proper pagination handling and rate limits."""
     
     base_url = f"https://{shopify_domain}/admin/api/2024-01/products.json?limit=100&fields=vendor"
     headers = {"X-Shopify-Access-Token": access_token}
     vendors = set()
     next_page_info = None
-    retry_attempts = 5  # Allow up to 5 retries in case of errors
+    retry_attempts = 5  # Maximum retries for rate limits
 
     while True:
         url = base_url if not next_page_info else f"{base_url}&page_info={next_page_info}"
-        print(f"Fetching: {url}")  # Debugging line
-
+        print(f"[DEBUG] Fetching: {url}")
+        
         for attempt in range(retry_attempts):
             response = requests.get(url, headers=headers)
-
-            if response.status_code == 200:
-                break  # Successful request, exit retry loop
-            elif response.status_code == 429:  # Rate limit hit
-                wait_time = (2 ** attempt)  # Exponential backoff (2s, 4s, 8s...)
-                print(f"Rate limited! Retrying in {wait_time} seconds...")
+            
+            # ✅ Handle Rate Limits (429)
+            if response.status_code == 429:
+                retry_after = int(response.headers.get("Retry-After", "2"))
+                wait_time = max(retry_after, 2 ** attempt)  # Exponential backoff
+                print(f"[WARNING] Rate limit hit. Retrying in {wait_time} seconds...")
                 time.sleep(wait_time)
-            elif response.status_code in [500, 502, 503, 504]:  # Server errors
-                print(f"Server error {response.status_code}, retrying in 5 seconds...")
-                time.sleep(5)
-            else:
-                print(f"Failed to fetch vendors: {response.status_code} - {response.text}")
-                return sorted(list(vendors))  # Return whatever we got so far
+                continue  # Retry the request
 
+            # ✅ Handle server errors (500, 502, 503, 504)
+            elif response.status_code in [500, 502, 503, 504]:
+                print(f"[WARNING] Server error {response.status_code}. Retrying in 5 seconds...")
+                time.sleep(5)
+                continue  # Retry request
+            
+            response.raise_for_status()
+            break  # Successful request, exit retry loop
+        
         data = response.json()
         if "products" in data:
             vendors.update([p["vendor"] for p in data["products"] if "vendor" in p])
-
-        # Shopify pagination fix
+        
+        # ✅ Fix Pagination Issue: Extract correct "next" page_info
         link_header = response.headers.get("Link")
         if link_header:
             match = re.search(r'<([^<>]*)>; rel="next"', link_header)
-            if match:
-                next_page_url = match.group(1)  # Extract full URL
-                next_page_info = next_page_url.split("page_info=")[-1]  # Extract just the page_info
-            else:
-                break  # No more pages
+            next_page_info = match.group(1).split("page_info=")[-1] if match else None
         else:
-            break  # No pagination header means last page
+            next_page_info = None  # No more pages
 
-        time.sleep(0.5)  # Prevent hitting rate limits
+        # ✅ Break loop if no more pages
+        if not next_page_info:
+            break
+
+        time.sleep(0.5)  # Prevent API rate limiting
 
     return sorted(list(vendors))
 
 
 
+
 def fetch_collections(shop):
-    """Fetch all custom and smart collections from Shopify with proper pagination and rate limit handling."""
+    """Fetch all collections from Shopify with rate limit handling and pagination."""
     try:
         headers = get_shopify_headers(shop)
-        collections = set()  
-
-        # ✅ Ensure shop URL is properly formatted
+        collections = set()
         shop = shop.replace("https://", "").replace("http://", "").strip("/")
+
         if not shop:
             raise ValueError("Invalid Shopify domain")
 
         endpoints = ["custom_collections", "smart_collections"]
-        retry_attempts = 5  # ✅ Allow up to 5 retries per request
+        retry_attempts = 5  # Limit retries
 
         for endpoint in endpoints:
             url = f"https://{shop}/admin/api/2024-01/{endpoint}.json?limit=250"
@@ -1959,39 +1961,37 @@ def fetch_collections(shop):
                     if response.status_code == 429:
                         retry_after = int(response.headers.get("Retry-After", "2"))
                         wait_time = max(retry_after, 2 ** attempt)  # Exponential backoff
-                        print(f"[WARNING] Shopify API rate limit hit. Retrying in {wait_time} seconds...")
+                        print(f"[WARNING] Rate limit hit. Retrying in {wait_time} seconds...")
                         time.sleep(wait_time)
-                        continue  # Retry same request
+                        continue  
 
                     # ✅ Handle server errors (500, 502, 503, 504)
                     elif response.status_code in [500, 502, 503, 504]:
                         print(f"[WARNING] Server error {response.status_code}. Retrying in 5 seconds...")
                         time.sleep(5)
-                        continue  # Retry same request
+                        continue  
 
                     response.raise_for_status()  # Raise exception for non-200 errors
-                    break  # Successful request, exit retry loop
+                    break  # Success, exit retry loop
 
                 data = response.json()
-
-                # ✅ Collect collection names
                 collections.update(col["title"] for col in data.get(endpoint, []))
 
-                # ✅ Shopify pagination fix
+                # ✅ Fix Pagination
                 link_header = response.headers.get("Link")
                 if link_header:
                     match = re.search(r'<([^<>]*)>; rel="next"', link_header)
-                    url = match.group(1) if match else None  # Extract next page URL
+                    url = match.group(1) if match else None
                 else:
-                    url = None  # No more pages
+                    url = None  
 
-        sorted_collections = sorted(collections)
-        print(f"[DEBUG] Final Collections Retrieved for {shop}: {sorted_collections}")
-        return sorted_collections
+        return sorted(collections)
 
     except requests.exceptions.RequestException as e:
-        print(f"[ERROR] Failed to fetch collections for {shop}: {e}")
+        print(f"[ERROR] Failed to fetch collections: {e}")
         return []
+    
+    
 
 @app.route('/seo/')
 def home():
