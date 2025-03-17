@@ -1879,38 +1879,60 @@ def fetch_product_types(shop):
         return []
 
 
+import time
+import requests
+import re
+
 def fetch_vendors(shopify_domain, access_token):
+    # Ensure shopify_domain is correctly formatted
+    if shopify_domain.startswith("https://"):
+        shopify_domain = shopify_domain.replace("https://", "")
+    
     base_url = f"https://{shopify_domain}/admin/api/2024-01/products.json?limit=100&fields=vendor"
     headers = {"X-Shopify-Access-Token": access_token}
     vendors = set()
     next_page_info = None
+    retry_attempts = 5  # Allow up to 5 retries in case of errors
 
     while True:
-        url = base_url  # Reset URL on each loop
-        if next_page_info:
-            url += f"&page_info={next_page_info}"
+        url = base_url if not next_page_info else f"{base_url}&page_info={next_page_info}"
+        print(f"Fetching: {url}")  # Debugging line
 
-        response = requests.get(url, headers=headers)
-        if response.status_code != 200:
-            print(f"Error fetching vendors: {response.text}")
-            break
+        for attempt in range(retry_attempts):
+            response = requests.get(url, headers=headers)
+
+            if response.status_code == 200:
+                break  # Successful request, exit retry loop
+            elif response.status_code == 429:  # Rate limit hit
+                wait_time = (2 ** attempt)  # Exponential backoff (2s, 4s, 8s...)
+                print(f"Rate limited! Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            elif response.status_code in [500, 502, 503, 504]:  # Server errors
+                print(f"Server error {response.status_code}, retrying in 5 seconds...")
+                time.sleep(5)
+            else:
+                print(f"Failed to fetch vendors: {response.status_code} - {response.text}")
+                return sorted(list(vendors))  # Return whatever we got so far
 
         data = response.json()
         if "products" in data:
             vendors.update([p["vendor"] for p in data["products"] if "vendor" in p])
 
-        # Shopify pagination
+        # Shopify pagination fix
         link_header = response.headers.get("Link")
-        if link_header and 'rel="next"' in link_header:
-            next_page_info = link_header.split(";")[0].strip("<>")
+        if link_header:
+            match = re.search(r'<([^<>]*)>; rel="next"', link_header)
+            if match:
+                next_page_url = match.group(1)  # Extract full URL
+                next_page_info = next_page_url.split("page_info=")[-1]  # Extract just the page_info
+            else:
+                break  # No more pages
         else:
-            break  # No more pages
+            break  # No pagination header means last page
 
         time.sleep(0.5)  # Prevent hitting rate limits
 
     return sorted(list(vendors))
-
-
 
 
 
