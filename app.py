@@ -208,12 +208,30 @@ def load_user_credentials():
 
 
 # ✅ Define Shopify Headers (Only if the token exists)
-def get_shopify_headers():
-    """Returns the Shopify API headers if the access token is available."""
-    return {
-        "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN if SHOPIFY_ACCESS_TOKEN else "",
-        "Content-Type": "application/json",
-    }
+def get_shopify_headers(shop):
+    """Retrieve Shopify API headers with OAuth token from DB."""
+    try:
+        connection = sqlite3.connect(DATABASE_PATH)
+        cursor = connection.cursor()
+        cursor.execute("SELECT access_token FROM shops WHERE shop_url=?", (shop,))
+        result = cursor.fetchone()
+        connection.close()
+
+        if not result:
+            print(f"[ERROR] No OAuth token found for {shop}")
+            return None
+
+        access_token = result[0]
+        print(f"[DEBUG] Using Access Token for {shop}: {access_token[:5]}...")  # Show only first 5 characters
+
+        return {
+            "X-Shopify-Access-Token": access_token,
+            "Content-Type": "application/json"
+        }
+    except Exception as e:
+        print(f"[ERROR] Failed to fetch Shopify headers: {e}")
+        return None
+
 
 # ✅ Function to Fetch Shopify Products (Only Runs When Needed)
 def fetch_shopify_products():
@@ -367,6 +385,7 @@ def oauth_callback():
         print("[ERROR] Missing API credentials.")
         return redirect(url_for("profile"))
 
+    # ✅ Validate HMAC to prevent request tampering
     params = request.args.to_dict(flat=False)
     params.pop("hmac", None)
     sorted_params = "&".join(f"{key}={','.join(value)}" for key, value in sorted(params.items()))
@@ -406,7 +425,7 @@ def oauth_callback():
 
     # ✅ Retrieve Store Email from Shopify
     headers = {"X-Shopify-Access-Token": access_token}
-    shop_info_url = f"https://{shop}/admin/api/2023-01/shop.json"
+    shop_info_url = f"https://{shop}/admin/api/2024-01/shop.json"
 
     try:
         shop_response = requests.get(shop_info_url, headers=headers, timeout=10)
@@ -419,21 +438,24 @@ def oauth_callback():
         email = f"no-email-{shop}"
         print(f"[ERROR] Failed to fetch store details from Shopify: {str(e)}")
 
-    # ✅ Store or Update User in Database
+    # ✅ Ensure User is Authenticated Before Saving
     with app.app_context():
         if current_user.is_authenticated:
-            # ✅ Use the logged-in user instead of matching by Shopify email
+            # ✅ Use the logged-in user
             user = current_user
             print(f"[DEBUG] Updating existing user: {user.email} (LOGGED-IN USER)")
         else:
-            # If no user is logged in, fallback to searching by shop domain
+            # ✅ Try to find a user by shopify_domain
             user = User.query.filter_by(shopify_domain=shop).first()
-            if not user:
-                print(f"[DEBUG] Creating new user for Shopify Domain: {shop}")
-                user = User(email=email, shopify_domain=shop, access_token=access_token)
-                db.session.add(user)
 
-        # ✅ Always update the access token
+            if not user:
+                # ✅ No user found—redirect to login first
+                flash("Please log in before connecting Shopify.", "warning")
+                print("[WARNING] No user found for this shop. Redirecting to login.")
+                return redirect(url_for("login"))  # Make sure this route exists
+
+        # ✅ Update the current user's Shopify credentials
+        user.shopify_domain = shop
         user.access_token = access_token
 
         try:
@@ -445,10 +467,11 @@ def oauth_callback():
             flash("OAuth failed! Could not save user data.", "danger")
             return redirect(url_for("profile"))
 
-    # ✅ Store the correct Shopify domain & access token in the session
+    # ✅ Store in Session (for immediate access)
     session["shopify_domain"] = user.shopify_domain
-    session["shopify_token"] = user.access_token  # Ensure the correct token is stored
-    session.modified = True  # Ensure Flask commits changes
+    session["shopify_token"] = user.access_token  # Ensure correct token is stored
+    session.modified = True
+
     print(f"[DEBUG] Stored Shopify Token in Session: {session.get('shopify_token')}")
 
     flash("Shopify OAuth successful! Your store is now connected.", "success")
@@ -1615,8 +1638,7 @@ def get_collection_id_by_name(shop, collection_name):
 
 
 
-import requests
-import time
+
 
 def fetch_products_from_api(shop, limit=50, product_type=None, vendor=None, collection_name=None, sort_by="title", page_info=None):
     """
@@ -1879,29 +1901,24 @@ def fetch_product_types(shop):
         return []
 
 
-import requests
-import re
-import time
-
-def fetch_vendors(shopify_domain, access_token):
-    """Fetch unique vendors from Shopify products with proper pagination handling and rate limits."""
+def fetch_vendors(shopify_domain, access_token, max_pages=50):
+    """Fetch unique vendors from Shopify products with pagination handling, rate limits, and error handling."""
     
-    # ✅ Ensure clean domain (Remove extra "https://" or "http://")
+    # ✅ Ensure clean domain format
     shopify_domain = shopify_domain.replace("https://", "").replace("http://", "")
     base_url = f"https://{shopify_domain}/admin/api/2024-01/products.json?limit=100&fields=vendor"
     
     headers = {"X-Shopify-Access-Token": access_token}
     vendors = set()
     next_page_info = None
-    retry_attempts = 5  # Maximum retries for rate limits
+    retry_attempts = 5  # Max retries for rate limits
+    page_count = 0  # Track number of pages fetched
 
     while True:
         url = base_url if not next_page_info else f"{base_url}&page_info={next_page_info}"
         
         # ✅ Debugging statements
-        print(f"[DEBUG] shopify_domain: {shopify_domain}")
-        print(f"[DEBUG] Fetching URL: {url}")
-        print(f"[DEBUG] next_page_info: {next_page_info}")
+        print(f"[DEBUG] Fetching Page {page_count + 1}: {url}")
 
         for attempt in range(retry_attempts):
             try:
@@ -1935,6 +1952,7 @@ def fetch_vendors(shopify_domain, access_token):
             print("[ERROR] Failed to parse JSON response from Shopify API.")
             return sorted(list(vendors))
 
+        # ✅ Extract vendors
         if "products" in data:
             vendors.update([p["vendor"] for p in data["products"] if "vendor" in p])
 
@@ -1946,8 +1964,11 @@ def fetch_vendors(shopify_domain, access_token):
         else:
             next_page_info = None  # No more pages
 
-        # ✅ Break loop if no more pages
-        if not next_page_info:
+        page_count += 1
+
+        # ✅ Break loop if no more pages or max page limit reached
+        if not next_page_info or page_count >= max_pages:
+            print(f"[INFO] Pagination complete. Total pages fetched: {page_count}")
             break
 
         time.sleep(0.5)  # Prevent API rate limiting
