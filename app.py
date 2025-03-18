@@ -397,6 +397,9 @@ def oauth_callback():
 
     print(f"[DEBUG] Shop: {shop}, Code: {code}, HMAC Validated Successfully.")
 
+    # ✅ Ensure Shopify domain is stored without "https://"
+    shop = shop.replace("https://", "").strip()
+
     # ✅ Exchange Authorization Code for Access Token
     token_url = f"https://{shop}/admin/oauth/access_token"
     try:
@@ -439,24 +442,27 @@ def oauth_callback():
 
     # ✅ Store or Update User in Database
     with app.app_context():
-        if current_user.is_authenticated:
-            # ✅ Use the logged-in user instead of matching by Shopify email
-            user = current_user
-            print(f"[DEBUG] Updating existing user: {user.email} (LOGGED-IN USER)")
-        else:
-            # If no user is logged in, fallback to searching by shop domain
-            user = User.query.filter_by(shopify_domain=shop).first()
-            if not user:
-                print(f"[DEBUG] Creating new user for Shopify Domain: {shop}")
-                user = User(email=email, shopify_domain=shop, access_token=access_token)
-                db.session.add(user)
-
-        # ✅ Always update the access token
-        user.access_token = access_token
-
         try:
+            if current_user.is_authenticated:
+                # ✅ Use the logged-in user
+                user = current_user
+                print(f"[DEBUG] Updating existing user: {user.email} (LOGGED-IN USER)")
+            else:
+                # Check if a user exists by Shopify domain (ignoring `https://`)
+                user = User.query.filter_by(shopify_domain=shop).first()
+
+                if user:
+                    print(f"[DEBUG] Found existing user by Shopify Domain: {shop}")
+                else:
+                    print(f"[DEBUG] Creating new user for Shopify Domain: {shop}")
+                    user = User(email=email, shopify_domain=shop)
+                    db.session.add(user)
+
+            # ✅ Always update the access token
+            user.access_token = access_token
             db.session.commit()
             print(f"[DEBUG] Database commit successful for user: {user.email}")
+
         except Exception as e:
             db.session.rollback()
             print(f"[ERROR] Database commit failed: {str(e)}")
@@ -471,6 +477,7 @@ def oauth_callback():
 
     flash("Shopify OAuth successful! Your store is now connected.", "success")
     return redirect(url_for("inventory"))
+
 
 
 
