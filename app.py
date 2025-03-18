@@ -25,6 +25,8 @@ from flask_wtf.csrf import CSRFProtect
 from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import DataRequired, Email, EqualTo
 from authlib.integrations.flask_client import OAuth
+from datetime import timedelta
+
 
 # Database & Redis
 import psycopg2
