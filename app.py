@@ -385,7 +385,6 @@ def oauth_callback():
         print("[ERROR] Missing API credentials.")
         return redirect(url_for("profile"))
 
-    # ✅ Validate HMAC to prevent request tampering
     params = request.args.to_dict(flat=False)
     params.pop("hmac", None)
     sorted_params = "&".join(f"{key}={','.join(value)}" for key, value in sorted(params.items()))
@@ -425,7 +424,7 @@ def oauth_callback():
 
     # ✅ Retrieve Store Email from Shopify
     headers = {"X-Shopify-Access-Token": access_token}
-    shop_info_url = f"https://{shop}/admin/api/2024-01/shop.json"
+    shop_info_url = f"https://{shop}/admin/api/2023-01/shop.json"
 
     try:
         shop_response = requests.get(shop_info_url, headers=headers, timeout=10)
@@ -438,24 +437,21 @@ def oauth_callback():
         email = f"no-email-{shop}"
         print(f"[ERROR] Failed to fetch store details from Shopify: {str(e)}")
 
-    # ✅ Ensure User is Authenticated Before Saving
+    # ✅ Store or Update User in Database
     with app.app_context():
         if current_user.is_authenticated:
-            # ✅ Use the logged-in user
+            # ✅ Use the logged-in user instead of matching by Shopify email
             user = current_user
             print(f"[DEBUG] Updating existing user: {user.email} (LOGGED-IN USER)")
         else:
-            # ✅ Try to find a user by shopify_domain
+            # If no user is logged in, fallback to searching by shop domain
             user = User.query.filter_by(shopify_domain=shop).first()
-
             if not user:
-                # ✅ No user found—redirect to login first
-                flash("Please log in before connecting Shopify.", "warning")
-                print("[WARNING] No user found for this shop. Redirecting to login.")
-                return redirect(url_for("login"))  # Make sure this route exists
+                print(f"[DEBUG] Creating new user for Shopify Domain: {shop}")
+                user = User(email=email, shopify_domain=shop, access_token=access_token)
+                db.session.add(user)
 
-        # ✅ Update the current user's Shopify credentials
-        user.shopify_domain = shop
+        # ✅ Always update the access token
         user.access_token = access_token
 
         try:
@@ -467,11 +463,10 @@ def oauth_callback():
             flash("OAuth failed! Could not save user data.", "danger")
             return redirect(url_for("profile"))
 
-    # ✅ Store in Session (for immediate access)
+    # ✅ Store the correct Shopify domain & access token in the session
     session["shopify_domain"] = user.shopify_domain
-    session["shopify_token"] = user.access_token  # Ensure correct token is stored
-    session.modified = True
-
+    session["shopify_token"] = user.access_token  # Ensure the correct token is stored
+    session.modified = True  # Ensure Flask commits changes
     print(f"[DEBUG] Stored Shopify Token in Session: {session.get('shopify_token')}")
 
     flash("Shopify OAuth successful! Your store is now connected.", "success")
