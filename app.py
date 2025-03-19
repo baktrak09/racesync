@@ -41,25 +41,20 @@ app = Flask(__name__)
 # ✅ Load Environment Variables
 
 db_url = os.getenv("SQLALCHEMY_DATABASE_URI")
-if not db_url:
-    raise ValueError("❌ ERROR: SQLALCHEMY_DATABASE_URI is NOT set!")
-
-# ✅ Adjust SSL settings
 if "?sslmode=" in db_url:
     db_url = db_url.replace("?sslmode=prefer", "?sslmode=require")
 else:
     db_url += "?sslmode=require"
 
-
-# ✅ Add Connection Pooling to Reduce Load
-app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql://racesyncdb_user:RDifK7RcBFvuaaqhCQC1TZqgR94ZPNVx@dpg-cv66brbqf0us73evgrfg-a/racesyncdb?sslmode=require"
+app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 
 # 🔧 Add Pooling & Recycle Settings
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_size": 10,  # Adjust based on workload
     "max_overflow": 20,
-    "pool_timeout": 30,  # Wait time before error
-    "pool_recycle": 280,  # Avoid stale connections
+    "pool_timeout": 30,  # Time before timeout error
+    "pool_recycle": 280,  # Recycle connections to prevent timeout
+    "pool_pre_ping": True,  # Check connection health before using it
 }
 
 
