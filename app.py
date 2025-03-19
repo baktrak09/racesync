@@ -1,93 +1,92 @@
+import openai
 import os
 import json
 import re
 import time
 import requests
 import urllib.parse
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
+from flask_session import Session
+import cProfile
+from ftplib import FTP
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import pandas as pd
 import random
 import math
 import threading
-import traceback
-import hmac
-import hashlib
-import cProfile
-import pandas as pd
-
-# Flask Imports
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
-from flask_session import Session
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, login_user, logout_user, current_user, login_required
+from flask_login import LoginManager, login_user, logout_user, current_user
 from flask_bcrypt import Bcrypt
+from werkzeug.security import generate_password_hash, check_password_hash
 from flask_migrate import Migrate
+from datetime import timedelta
+from sqlalchemy.exc import SQLAlchemyError
+from flask_login import login_required
+import psycopg2
+from psycopg2.extras import DictCursor
 from flask_wtf import FlaskForm
-from flask_wtf.csrf import CSRFProtect
 from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import DataRequired, Email, EqualTo
 from authlib.integrations.flask_client import OAuth
-from datetime import timedelta
-
-
-# Database & Redis
-import psycopg2
-from psycopg2.extras import DictCursor
+import hmac
+import hashlib
 import redis
-from sqlalchemy.exc import SQLAlchemyError
-
-# FTP & Concurrency
-from ftplib import FTP
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import traceback
 
 # ✅ Initialize Flask App
 app = Flask(__name__)
 
 # ✅ Load Environment Variables
-db_url = os.getenv("SQLALCHEMY_DATABASE_URI")
-redis_url = os.getenv("REDIS_URL")
-secret_key = os.getenv("FLASK_SECRET_KEY", "fallback_secret_key")
 
+db_url = os.getenv("SQLALCHEMY_DATABASE_URI")
 if not db_url:
     raise ValueError("❌ ERROR: SQLALCHEMY_DATABASE_URI is NOT set!")
 
-if not redis_url:
-    raise ValueError("❌ ERROR: REDIS_URL is NOT set!")
-
-if not secret_key:
-    print("⚠️ WARNING: FLASK_SECRET_KEY is NOT set! Using fallback secret key.")
-
-# ✅ Adjust Database SSL settings
+# ✅ Adjust SSL settings
 if "?sslmode=" in db_url:
     db_url = db_url.replace("?sslmode=prefer", "?sslmode=require")
 else:
     db_url += "?sslmode=require"
 
-app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 
-# ✅ Connection Pooling & Performance Tweaks
+# ✅ Add Connection Pooling to Reduce Load
+app.config["SQLALCHEMY_DATABASE_URI"] = "postgresql://racesyncdb_user:RDifK7RcBFvuaaqhCQC1TZqgR94ZPNVx@dpg-cv66brbqf0us73evgrfg-a/racesyncdb?sslmode=require"
+
+# 🔧 Add Pooling & Recycle Settings
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_size": 10,  # Default concurrent connections
-    "max_overflow": 20,  # Extra connections if needed
-    "pool_timeout": 30,  # Max wait time before timeout
-    "pool_recycle": 280,  # Prevent idle connections from breaking
+    "pool_size": 10,  # Adjust based on workload
+    "max_overflow": 20,
+    "pool_timeout": 30,  # Wait time before error
+    "pool_recycle": 280,  # Avoid stale connections
 }
 
-# ✅ Redis Session Handling
-redis_url = redis_url.replace("rediss://", "redis://")  # Convert to standard Redis URL
 
-redis_client = redis.StrictRedis.from_url(redis_url, decode_responses=True, encoding="utf-8", encoding_errors="replace")
 
+redis_url = os.getenv("REDIS_URL")
+if not redis_url:
+    raise ValueError("❌ ERROR: REDIS_URL is NOT set!")
+
+redis_url = redis_url.replace("rediss://", "redis://")  # Ensure it's using the correct format
+
+# ✅ Use Redis for Flask-Session
 app.config["SESSION_TYPE"] = "redis"
 app.config["SESSION_PERMANENT"] = True
 app.config["SESSION_USE_SIGNER"] = True
 app.config["SESSION_KEY_PREFIX"] = "racesync_session:"
-app.config["SESSION_REDIS"] = redis_client
+app.config["SESSION_REDIS"] = redis.StrictRedis.from_url(redis_url)
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 
-# ✅ Flask Security
-app.secret_key = secret_key
-csrf = CSRFProtect(app)  # Enable CSRF Protection
+# ✅ Use Pickle for Serialization Instead of JSON
+app.config["SESSION_SERIALIZATION_METHOD"] = pickle  # This ensures the session data is stored in the correct format
 
-# ✅ Initialize Flask Extensions
+# ✅ Ensure SECRET_KEY is properly set
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "fallback_secret_key")
+
+if not os.getenv("FLASK_SECRET_KEY"):
+    print("⚠️ WARNING: FLASK_SECRET_KEY is NOT set! Using fallback secret key.")
+
+
+# ✅ Initialize Extensions
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 bcrypt = Bcrypt(app)
@@ -99,7 +98,6 @@ oauth = OAuth(app)
 # ✅ Debugging Output
 print(f"🔍 [DEBUG] SQLALCHEMY_DATABASE_URI = {db_url}")
 print(f"🔍 [DEBUG] REDIS_URL = {redis_url}")
-
 
 # ✅ Import Models AFTER `db` is initialized
 from models import User, Setting
