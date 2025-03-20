@@ -34,7 +34,7 @@ import redis
 import traceback
 import pickle
 from gunicorn.app.base import BaseApplication
-from flask_caching import Cache
+
 
 
 # ✅ Initialize Flask App
@@ -126,25 +126,31 @@ def get_shopify_credentials():
     return credentials
 
 # ✅ Function to Get User-Specific Shopify & FTP Credentials
-def get_user_credentials(user_id):
-    """Fetch user-specific Shopify and FTP credentials from the database with error handling."""
-    try:
-        with app.app_context():
-            user = User.query.filter_by(id=user_id).first()
-            if not user:
-                print(f"[WARNING] No user found with ID {user_id}.")
-                return {}
+from sqlalchemy.exc import SQLAlchemyError
 
-            return {
-                "shopify_domain": user.shopify_domain or "",
-                "shopify_access_token": user.access_token or "",
-                "ftp_host": user.ftp_host or "",
-                "ftp_user": user.ftp_user or "",
-                "ftp_pass": user.ftp_pass or "",
-            }
+def get_user_credentials(user_id):
+    try:
+        credentials = db.session.execute(
+            text("SELECT shopify_domain, shopify_access_token FROM users WHERE id = :user_id"),
+            {"user_id": user_id},
+        ).fetchone()
+        
+        if credentials:
+            shopify_domain, shopify_access_token = credentials
+            
+            if not shopify_domain or not shopify_access_token:
+                print("[ERROR] Shopify credentials found but are empty!")
+                return None, None
+            
+            print(f"[DEBUG] Retrieved Shopify credentials: {shopify_domain}, Token starts with: {shopify_access_token[:6]}********")
+            return shopify_domain, shopify_access_token
+        else:
+            print(f"[ERROR] No Shopify credentials found for user ID: {user_id}")
+            return None, None
     except SQLAlchemyError as e:
-        print(f"[ERROR] Database error in get_user_credentials(): {e}")
-        return {}  # Prevent crash
+        print(f"[ERROR] Database error while fetching credentials: {e}")
+        return None, None
+
 
 
 # ✅ Lazy-Load Shopify Credentials (Only When User is Logged In)
@@ -884,26 +890,28 @@ CACHE = {
 }
 
 
-cache = Cache(app, config={'CACHE_TYPE': 'simple'})
-
-def get_cached_data(key, fetch_function):
-    cached_data = cache.get(key)
-    if cached_data and time.time() - cached_data["timestamp"] < 3600:  # Cache for 1 hour
-        return cached_data["data"]
-
-    # Fetch fresh data if cache is expired or empty
-    data = fetch_function()
-    cache.set(key, {"data": data, "timestamp": time.time()}, timeout=3600)
-    return data
-
 def get_cached_product_types():
-    return get_cached_data("product_types", fetch_shopify_product_types)
+    cache = load_cache()
+
+    # 🛠 Debug print to check structure
+    print(f"[DEBUG] Cached product_types: {cache.get('product_types')}")
+
+    if isinstance(cache.get("product_types"), list):
+        print("[ERROR] product_types is a list! Resetting cache.")
+        return []  # Ensure it doesn’t crash
+
+    return cache["product_types"]["data"]
+
 
 def get_cached_vendors():
-    return get_cached_data("vendors", fetch_shopify_vendors)
+    """Fetch vendors from the cache file only."""
+    cache = load_cache()
+    return cache["vendors"]["data"]
 
 def get_cached_collections():
-    return get_cached_data("collections", fetch_shopify_collections)
+    """Fetch collections from the cache file only."""
+    cache = load_cache()
+    return cache["collections"]["data"]
 
 # ✅ Fetch Shopify Data Functions
 MAX_RETRIES = 5
