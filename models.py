@@ -4,6 +4,8 @@ import enum
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from app import db
+from sqlalchemy import Column, Integer, String, JSON  # Add 'Column' and 'JSON'
+from sqlalchemy.ext.declarative import declarative_base
 
 
 
