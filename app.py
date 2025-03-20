@@ -3523,7 +3523,8 @@ class CustomGunicornApp(BaseApplication):
     def load_config(self):
         self.cfg.set("timeout", 180)  # Increase timeout to 180 seconds
         self.cfg.set("workers", 4)    # Increase worker count to 4
-        self.cfg.set("threads", 2)    # Use 2 threads per worker
+        self.cfg.set("threads", 4)   # Increase threads per worker
+        self.cfg.set("loglevel", "debug")  # Enable detailed logs
 
     def load(self):
         return app
