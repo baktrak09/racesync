@@ -21,7 +21,7 @@ class User(db.Model, UserMixin):
     must_reset_password = db.Column(db.Boolean, default=False)
     shopify_domain = db.Column(db.String(255), unique=True, nullable=True)
     access_token = db.Column(db.String(255), nullable=True)  # ✅ Allow NULL values
-    
+    shopify_data = Column(JSON, default={})  # Stores product types, vendors, collections
 
 
     def set_password(self, password):
