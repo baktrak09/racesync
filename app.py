@@ -33,6 +33,7 @@ import hashlib
 import redis
 import traceback
 import pickle
+from gunicorn.app.base import BaseApplication
 
 
 # ✅ Initialize Flask App
@@ -3511,9 +3512,14 @@ def save_all(product_id):
         print(f"[ERROR] Failed to save AI content: {e}")
         return jsonify({"error": "Failed to save content"}), 500
 
+class CustomGunicornApp(BaseApplication):
+    def load_config(self):
+        self.cfg.set("timeout", 180)  # Increase timeout to 180 seconds
+        self.cfg.set("workers", 4)    # Increase worker count to 4
+        self.cfg.set("threads", 2)    # Use 2 threads per worker
 
-
-
+    def load(self):
+        return app
 
 if __name__ == "__main__":
-        app.run(debug=False)
+    CustomGunicornApp().run()
