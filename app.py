@@ -34,6 +34,7 @@ import redis
 import traceback
 import pickle
 from gunicorn.app.base import BaseApplication
+from flask_caching import Cache
 
 
 # ✅ Initialize Flask App
@@ -883,28 +884,26 @@ CACHE = {
 }
 
 
+cache = Cache(app, config={'CACHE_TYPE': 'simple'})
+
+def get_cached_data(key, fetch_function):
+    cached_data = cache.get(key)
+    if cached_data and time.time() - cached_data["timestamp"] < 3600:  # Cache for 1 hour
+        return cached_data["data"]
+
+    # Fetch fresh data if cache is expired or empty
+    data = fetch_function()
+    cache.set(key, {"data": data, "timestamp": time.time()}, timeout=3600)
+    return data
+
 def get_cached_product_types():
-    cache = load_cache()
-
-    # 🛠 Debug print to check structure
-    print(f"[DEBUG] Cached product_types: {cache.get('product_types')}")
-
-    if isinstance(cache.get("product_types"), list):
-        print("[ERROR] product_types is a list! Resetting cache.")
-        return []  # Ensure it doesn’t crash
-
-    return cache["product_types"]["data"]
-
+    return get_cached_data("product_types", fetch_shopify_product_types)
 
 def get_cached_vendors():
-    """Fetch vendors from the cache file only."""
-    cache = load_cache()
-    return cache["vendors"]["data"]
+    return get_cached_data("vendors", fetch_shopify_vendors)
 
 def get_cached_collections():
-    """Fetch collections from the cache file only."""
-    cache = load_cache()
-    return cache["collections"]["data"]
+    return get_cached_data("collections", fetch_shopify_collections)
 
 # ✅ Fetch Shopify Data Functions
 MAX_RETRIES = 5
