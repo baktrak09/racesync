@@ -1867,7 +1867,7 @@ def fetch_product_types(shop):
         product_types = set()
 
         # ✅ Ensure `shop` is formatted correctly
-        shop = shop.replace("https://", "").replace("http://", "")
+        shop = shop.replace("https://", "").replace("http://", "").strip("/")
 
         url = f"https://{shop}/admin/api/2024-01/products.json?limit=250&fields=product_type"
         while url:
@@ -3531,3 +3531,27 @@ class CustomGunicornApp(BaseApplication):
 
 if __name__ == "__main__":
     CustomGunicornApp().run()
+
+from concurrent.futures import ThreadPoolExecutor
+
+def fetch_paginated_data_concurrently(base_url, headers):
+    results = []
+    page_info = None
+
+    def fetch_page(url):
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        return response.json(), response.headers.get("Link", "")
+
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = []
+        while True:
+            url = f"{base_url}&page_info={page_info}" if page_info else base_url
+            futures.append(executor.submit(fetch_page, url))
+
+            for future in as_completed(futures):
+                data, links = future.result()
+                results.extend(data.get("products", []))
+                page_info = extract_next_page_info(links)
+                if not page_info:
+                    return results
