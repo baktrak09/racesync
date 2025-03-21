@@ -34,6 +34,8 @@ import redis
 import traceback
 import pickle
 from gunicorn.app.base import BaseApplication
+from celery import Celery
+from flask_caching import Cache
 
 
 
@@ -93,6 +95,7 @@ login_manager = LoginManager(app)
 login_manager.login_view = "login"
 Session(app)
 oauth = OAuth(app)
+cache = Cache(app, config={'CACHE_TYPE': 'SimpleCache'})
 
 # ✅ Debugging Output
 print(f"🔍 [DEBUG] SQLALCHEMY_DATABASE_URI = {db_url}")
@@ -890,17 +893,9 @@ CACHE = {
 }
 
 
-def get_cached_product_types():
-    cache = load_cache()
-
-    # 🛠 Debug print to check structure
-    print(f"[DEBUG] Cached product_types: {cache.get('product_types')}")
-
-    if isinstance(cache.get("product_types"), list):
-        print("[ERROR] product_types is a list! Resetting cache.")
-        return []  # Ensure it doesn’t crash
-
-    return cache["product_types"]["data"]
+@cache.cached(timeout=3600, key_prefix='product_types')
+def get_cached_product_types(shopify_domain):
+    return fetch_product_types(shopify_domain)
 
 
 def get_cached_vendors():
@@ -2075,7 +2070,7 @@ def home():
     )
 
     # ✅ Fetch Product Types, Vendors, and Collections
-    product_types = get_cached_product_types()
+    product_types = get_cached_product_types(shopify_domain)
     vendors = get_cached_vendors()
     collections = get_cached_collections()
 
@@ -2612,7 +2607,7 @@ def generate_seo_description(product_id):
 @app.route('/seo/save_industry', methods=['POST'])
 def save_industry():
     industry = request.form.get('industry')
-    if industry:
+    if (industry):
         session['industry'] = industry
         flash("Industry saved successfully!")
     else:
@@ -2974,7 +2969,6 @@ def ensure_metafield_exists(product_id, key, metafield_type):
             key: "{key}",
             type: "{metafield_type}",
             ownerType: PRODUCT
-        }}) {{
             createdDefinition {{
                 id
             }}
@@ -3521,8 +3515,8 @@ def save_all(product_id):
 
 class CustomGunicornApp(BaseApplication):
     def load_config(self):
-        self.cfg.set("timeout", 180)  # Increase timeout to 180 seconds
-        self.cfg.set("workers", 4)    # Increase worker count to 4
+        self.cfg.set("timeout", 300)  # Increase timeout to 180 seconds
+        self.cfg.set("workers", 6)    # Increase worker count to 4
         self.cfg.set("threads", 4)   # Increase threads per worker
         self.cfg.set("loglevel", "debug")  # Enable detailed logs
 
@@ -3534,24 +3528,39 @@ if __name__ == "__main__":
 
 from concurrent.futures import ThreadPoolExecutor
 
-def fetch_paginated_data_concurrently(base_url, headers):
+def fetch_paginated_data_concurrently(base_url, headers, max_pages=50):
     results = []
     page_info = None
-
-    def fetch_page(url):
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        return response.json(), response.headers.get("Link", "")
-
+    futures = []
     with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = []
-        while True:
+        for _ in range(max_pages):
             url = f"{base_url}&page_info={page_info}" if page_info else base_url
-            futures.append(executor.submit(fetch_page, url))
+            futures.append(executor.submit(requests.get, url, headers=headers))
+            if not page_info:
+                break
 
-            for future in as_completed(futures):
-                data, links = future.result()
-                results.extend(data.get("products", []))
-                page_info = extract_next_page_info(links)
-                if not page_info:
-                    return results
+        for future in as_completed(futures):
+            response = future.result()
+            response.raise_for_status()
+            data = response.json()
+            results.extend(data.get("products", []))
+            link_header = response.headers.get("Link")
+            if link_header:
+                match = re.search(r'<([^<>]*)>; rel="next"', link_header)
+                page_info = match.group(1).split("page_info=")[-1] if match else None
+            else:
+                break
+    return results
+
+celery = Celery(app.name, broker='redis://localhost:6379/0')
+
+@celery.task
+def fetch_vendors_task(shopify_domain, access_token):
+    return fetch_vendors(shopify_domain, access_token)
+
+@app.route('/seo/update_vendors', methods=['POST'])
+def update_vendors():
+    shopify_domain = request.json.get("shopify_domain")
+    access_token = request.json.get("access_token")
+    task = fetch_vendors_task.delay(shopify_domain, access_token)
+    return jsonify({"task_id": task.id}), 202
