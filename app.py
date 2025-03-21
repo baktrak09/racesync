@@ -1871,7 +1871,8 @@ def fetch_product_types(shop):
 
             # ✅ Handle Rate Limiting (429 error)
             if response.status_code == 429:
-                retry_after = int(response.headers.get("Retry-After", "2"))
+                retry_after = float(response.headers.get("Retry-After", "2"))
+                retry_after = max(1, int(retry_after))  # Ensure at least 1 second
                 print(f"[WARNING] Shopify API rate limit hit (product types). Retrying after {retry_after} seconds...")
                 time.sleep(retry_after)
                 continue  # Retry request
