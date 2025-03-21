@@ -984,7 +984,8 @@ def fetch_all_product_types(shop):
 
 
 # ✅ Fetch Product Data from Shopify
-def fetch_product_by_id(shop, product_id):
+def fetch_product_by_id(shop_url, product_id):
+    shop_url = str(shop_url).replace("https://", "").replace("/", "")
     """Fetch product details from Shopify API for a specific store."""
     product_id = product_id.replace("gid://shopify/Product/", "").strip()
     query = f"""
