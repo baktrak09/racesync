@@ -1907,76 +1907,57 @@ def fetch_product_types(shop):
 
 
 def fetch_vendors(shopify_domain, access_token, max_pages=50):
-    """Fetch unique vendors from Shopify products with pagination handling, rate limits, and error handling."""
-    
-    # ✅ Ensure clean domain format
-    shopify_domain = shopify_domain.replace("https://", "").replace("http://", "")
-    base_url = f"https://{shopify_domain}/admin/api/2024-01/products.json?limit=100&fields=vendor"
-    
     headers = {"X-Shopify-Access-Token": access_token}
     vendors = set()
     next_page_info = None
     retry_attempts = 5  # Max retries for rate limits
-    page_count = 0  # Track number of pages fetched
+    page_count = 0
 
     while True:
-        url = base_url if not next_page_info else f"{base_url}&page_info={next_page_info}"
-        
-        # ✅ Debugging statements
-        print(f"[DEBUG] Fetching Page {page_count + 1}: {url}")
+        url = f"https://{shopify_domain}/admin/api/2024-01/products.json?limit=100&fields=vendor"
+        if next_page_info:
+            url += f"&page_info={next_page_info}"
 
         for attempt in range(retry_attempts):
             try:
                 response = requests.get(url, headers=headers)
 
-                # ✅ Handle Rate Limits (429)
+                # Handle rate limits (429)
                 if response.status_code == 429:
                     retry_after = int(response.headers.get("Retry-After", "2"))
                     wait_time = max(retry_after, 2 ** attempt)  # Exponential backoff
                     print(f"[WARNING] Rate limit hit. Retrying in {wait_time} seconds...")
                     time.sleep(wait_time)
-                    continue  # Retry the request
+                    continue
 
-                # ✅ Handle server errors (500, 502, 503, 504)
+                # Handle server errors (500, 502, 503, 504)
                 elif response.status_code in [500, 502, 503, 504]:
                     print(f"[WARNING] Server error {response.status_code}. Retrying in 5 seconds...")
                     time.sleep(5)
-                    continue  # Retry request
+                    continue
 
                 response.raise_for_status()
-                break  # Successful request, exit retry loop
-            
+                break  # Exit retry loop on success
+
             except requests.exceptions.RequestException as e:
                 print(f"[ERROR] Shopify API request failed: {e}")
                 return sorted(list(vendors))  # Return whatever vendors we have so far
 
-        # ✅ Parse JSON response
-        try:
-            data = response.json()
-        except ValueError:
-            print("[ERROR] Failed to parse JSON response from Shopify API.")
-            return sorted(list(vendors))
+        # Parse the response
+        data = response.json()
+        for product in data.get("products", []):
+            vendors.add(product.get("vendor", "").strip())
 
-        # ✅ Extract vendors
-        if "products" in data:
-            vendors.update([p["vendor"] for p in data["products"] if "vendor" in p])
-
-        # ✅ Fix Pagination Issue: Extract correct "next" page_info
+        # Check for pagination
         link_header = response.headers.get("Link")
-        if link_header:
-            match = re.search(r'<([^<>]*)>; rel="next"', link_header)
-            next_page_info = match.group(1).split("page_info=")[-1] if match else None
+        if link_header and 'rel="next"' in link_header:
+            next_page_info = link_header.split("page_info=")[-1].split(">")[0]
+            page_count += 1
+            if page_count >= max_pages:
+                print("[INFO] Reached max pages limit.")
+                break
         else:
-            next_page_info = None  # No more pages
-
-        page_count += 1
-
-        # ✅ Break loop if no more pages or max page limit reached
-        if not next_page_info or page_count >= max_pages:
-            print(f"[INFO] Pagination complete. Total pages fetched: {page_count}")
             break
-
-        time.sleep(0.5)  # Prevent API rate limiting
 
     return sorted(list(vendors))
 
@@ -3551,6 +3532,8 @@ def fetch_paginated_data_concurrently(base_url, headers, max_pages=50):
             else:
                 break
     return results
+
+celery = Celery(app.name, broker='redis://localhost:6379/0')
 
 celery = Celery(app.name, broker='redis://localhost:6379/0')
 
