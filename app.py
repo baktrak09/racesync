@@ -2253,22 +2253,32 @@ def calculate_seo_score(title, description, alt_text):
 
 @app.route("/product/<product_id>")
 def product_details(product_id):
-    shop = request.args.get("shopify_domain")  # ✅ Get shop from request
+    try:
+        product_id = int(product_id)  # ✅ Ensure product_id is an integer
+    except ValueError:
+        return jsonify({"error": "Invalid product ID"}), 400
 
+    shop = request.args.get("shopify_domain")  # ✅ Get shop from request
     if not shop:
+        print("[ERROR] Missing shopify_domain in request")
         return jsonify({"error": "Missing shopify_domain parameter"}), 400
 
     print(f"[DEBUG] Rendering product details for ID: {product_id} in {shop}")
 
-    product_data = fetch_product_by_id(shop, product_id)  # ✅ Pass shop parameter
-    print(f"[DEBUG] Final Processed Product Data: {product_data}")  
+    try:
+        product_data = fetch_product_by_id(shop, product_id)  # ✅ Pass shop parameter
+        if not product_data:
+            print(f"[ERROR] Product {product_id} not found in store {shop}")
+            return jsonify({"error": "Product not found"}), 404
+    except Exception as e:
+        print(f"[ERROR] Shopify API Fetch Error: {e}")
+        return jsonify({"error": f"Shopify API Error: {str(e)}"}), 500
 
-    if not product_data:
-        return "Product not found", 404
+    print(f"[DEBUG] Final Processed Product Data: {product_data}")
 
     if not isinstance(product_data, dict):
         print("[ERROR] Unexpected product data type:", type(product_data))
-        return "Product data error", 500
+        return jsonify({"error": "Product data error"}), 500
 
     meta_title = product_data.get("meta_title") or product_data.get("title", "").strip()
     meta_description = product_data.get("meta_description") or product_data.get("descriptionHtml", "").strip()
@@ -2286,6 +2296,7 @@ def product_details(product_id):
         filters=filters,  # ✅ Pass filters so Jinja knows what it is
         segment="product_details"
     )
+
 
 
 def generate_ai_content(shop, prompt, max_tokens=50):
