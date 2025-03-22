@@ -986,8 +986,10 @@ def fetch_all_product_types(shop):
 # ✅ Fetch Product Data from Shopify
 def fetch_product_by_id(shop_url, product_id):
     shop_url = str(shop_url).replace("https://", "").replace("/", "")
+
     """Fetch product details from Shopify API for a specific store."""
-    product_id = product_id.replace("gid://shopify/Product/", "").strip()
+    product_id = str(product_id).replace("gid://shopify/Product/", "").strip()
+
     query = f"""
     {{
         product(id: "gid://shopify/Product/{product_id}") {{
@@ -1004,8 +1006,8 @@ def fetch_product_by_id(shop_url, product_id):
         }}
     }}
     """
-    url = get_shopify_graphql_url(shop)
-    headers = get_shopify_headers(shop)
+    url = get_shopify_graphql_url(shop_url)
+    headers = get_shopify_headers(shop_url)
 
     response = requests.post(url, json={"query": query}, headers=headers)
     response_json = response.json()
@@ -1028,6 +1030,7 @@ def fetch_product_by_id(shop_url, product_id):
         "image_url": images[0]["node"]["src"] if images else "",
         "image_id": images[0]["node"]["id"] if images else "",
     }
+
 
 
 # ✅ Flask Route: Dashboard (Requires Login)
