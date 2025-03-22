@@ -166,7 +166,7 @@
         <div class="product-grid">
             {% for product in products %}
             <div class="product-card">
-                <a href="{{ url_for('product_details', product_id=product.id) }}">
+                <a href="{{ url_for('product_details', product_id=product.id, shopify_domain=shopify_domain) }}">
                     <img src="{{ product.images[0]['src'] }}" alt="{{ product.title }}">
                     <div class="product-title">{{ product.title }}</div>
                 </a>

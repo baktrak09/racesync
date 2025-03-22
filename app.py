@@ -2067,17 +2067,18 @@ def home():
     session["next_page_url"] = next_page_url
 
     return render_template('products.html',
-                           products=products,
-                           next_page_url=next_page_url,
-                           previous_page_url=previous_page_url,
-                           product_types=product_types,
-                           vendors=vendors,
-                           collections=collections,
-                           product_type=product_type,
-                           vendor=vendor,
-                           segment="product_details",
-                           collection_name=collection_name,
-                           sort_by=sort_by)
+                       products=products,
+                       next_page_url=next_page_url,
+                       previous_page_url=previous_page_url,
+                       product_types=product_types,
+                       vendors=vendors,
+                       collections=collections,
+                       product_type=product_type,
+                       vendor=vendor,
+                       segment="product_details",
+                       collection_name=collection_name,
+                       sort_by=sort_by,
+                       shopify_domain=shopify_domain)
 
 
 @app.route('/seo/save_prompt', methods=['POST'])
