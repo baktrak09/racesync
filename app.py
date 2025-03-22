@@ -2336,11 +2336,11 @@ def generate_ai_content(shop, prompt, max_tokens=50):
 @app.route('/seo/generate_title/<product_id>', methods=['POST'])
 def generate_title(product_id):
     """Generate an AI-based SEO title for a product."""
-    shop = request.args.get("shopify_domain")  # ✅ Get store dynamically
+    shop = session.get("shopify_domain")  # ✅ Pull from session instead of query string
     if not shop:
-        return jsonify({"error": "Missing shopify_domain parameter"}), 400
+        return jsonify({"error": "Missing shopify_domain in session"}), 400
 
-    product = fetch_product_by_id(shop, product_id)  # ✅ Fetch product data dynamically
+    product = fetch_product_by_id(shop, product_id)
     if not product:
         return jsonify({"error": "Product not found"}), 404
 
@@ -2372,22 +2372,19 @@ Generate a product title using only the details provided:
     if not generated_title:
         return jsonify({"error": "Failed to generate product title"}), 500
 
-    # ✅ **Remove unwanted quotes**
-    generated_title = generated_title.strip('"').strip("'")
+    generated_title = generated_title.strip('"').strip("'")  # ✅ Clean up stray quotes
 
     print(f"[DEBUG] Cleaned Generated Title: {generated_title}")
 
     return jsonify({"product_title": generated_title})
 
 
-
-
 @app.route('/seo/generate_description/<product_id>', methods=['POST'])
 def generate_description(product_id):
     """Generate an AI-optimized product description with custom prompt integration."""
-    shop = request.args.get("shopify_domain")
+    shop = session.get("shopify_domain")  # ✅ Pull from session instead of query string
     if not shop:
-        return jsonify({"error": "Missing shopify_domain parameter"}), 400
+        return jsonify({"error": "Missing shopify_domain in session"}), 400
 
     product = fetch_product_by_id(shop, product_id)
     if not product:
@@ -2397,24 +2394,23 @@ def generate_description(product_id):
     vendor = product.get("vendor", "Unknown Vendor").strip()
     product_type = product.get("productType", "N/A").strip()
     description = product.get("descriptionHtml", "").strip()
-
     custom_prompt = session.get("custom_prompt", "").strip()
 
     prompt = f"""
-    {custom_prompt if custom_prompt else "Write a clear, no-fluff product description."}
+{custom_prompt if custom_prompt else "Write a clear, no-fluff product description."}
 
-    **STRICT RULES:**
-    - **NO vague marketing phrases** (e.g., "boost performance," "enhance ride").
-    - **DO NOT assume fitment unless explicitly listed.**
-    - **DO NOT change the vendor name `{vendor}`.**
-    - **If vendor is known, mention it naturally at least once.**
-    - Ensure technical accuracy while maintaining clarity.
+**STRICT RULES:**
+- **NO vague marketing phrases** (e.g., "boost performance," "enhance ride").
+- **DO NOT assume fitment unless explicitly listed.**
+- **DO NOT change the vendor name `{vendor}`.**
+- **If vendor is known, mention it naturally at least once.**
+- Ensure technical accuracy while maintaining clarity.
 
-    **Product details:**
-    - **Name:** {title}
-    - **Vendor:** {vendor}
-    - **Type:** {product_type}
-    - **Current Description:** {description if description else "No description available."}
+**Product details:**
+- **Name:** {title}
+- **Vendor:** {vendor}
+- **Type:** {product_type}
+- **Current Description:** {description if description else "No description available."}
 """
 
     print(f"[DEBUG] OpenAI Prompt for Description:\n{prompt.strip()}")
@@ -2424,17 +2420,17 @@ def generate_description(product_id):
     if not generated_description:
         return jsonify({"error": "Failed to generate description"}), 500
 
-    # ✅ **Truncate to avoid cut-off sentences**
     if len(generated_description) > 600:
         last_full_stop = generated_description[:600].rfind(".")
         if last_full_stop != -1:
-            generated_description = generated_description[:last_full_stop + 1]  # Cut at last full stop
+            generated_description = generated_description[:last_full_stop + 1]
         else:
-            generated_description = generated_description[:590] + "..."  # Prevent mid-word cut-off
+            generated_description = generated_description[:590] + "..."
 
     print(f"[DEBUG] Cleaned Generated Description: {generated_description}")
 
     return jsonify({"product_description": generated_description})
+
 
 
 
