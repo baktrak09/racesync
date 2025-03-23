@@ -36,7 +36,8 @@ import pickle
 from gunicorn.app.base import BaseApplication
 from celery import Celery
 from flask_caching import Cache
-
+from your_util_file import save_shopify_data_for_user
+from your_util_file import load_shopify_data_for_user
 
 
 # ✅ Initialize Flask App
@@ -103,6 +104,24 @@ print(f"🔍 [DEBUG] REDIS_URL = {redis_url}")
 
 # ✅ Import Models AFTER `db` is initialized
 from models import User, Setting
+
+# 🔐 Save Shopify data per user
+def save_shopify_data_for_user(email, data):
+    safe_email = email.replace("@", "_at_").replace(".", "_dot_")
+    os.makedirs("shopify_user_data", exist_ok=True)
+    path = os.path.join("shopify_user_data", f"{safe_email}_shopify_data.json")
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+
+# 🔓 Load Shopify data per user
+def load_shopify_data_for_user(email):
+    safe_email = email.replace("@", "_at_").replace(".", "_dot_")
+    path = os.path.join("shopify_user_data", f"{safe_email}_shopify_data.json")
+    if os.path.exists(path):
+        with open(path, "r") as f:
+            return json.load(f)
+    return {}  # Return empty dict if no file exists
+
 
 # ✅ User Loader for Flask-Login
 @login_manager.user_loader
@@ -1910,7 +1929,6 @@ def fetch_product_types(shop):
         print(f"[ERROR] Failed to fetch product types for {shop}: {e}")
         return []
 
-
 def fetch_vendors(shopify_domain, access_token, max_pages=50):
     headers = {"X-Shopify-Access-Token": access_token}
     vendors = set()
@@ -1965,10 +1983,6 @@ def fetch_vendors(shopify_domain, access_token, max_pages=50):
             break
 
     return sorted(list(vendors))
-
-
-
-
 
 def fetch_collections(shop):
     """Fetch all collections from Shopify with rate limit handling and pagination."""
@@ -2026,90 +2040,6 @@ def fetch_collections(shop):
         print(f"[ERROR] Failed to fetch collections: {e}")
         return []
     
-
-
-@app.route('/seo/')
-def home():
-    print("[DEBUG] Rendering home page")
-
-    product_type = request.args.get('product_type')
-    vendor = request.args.get('vendor')
-    collection_name = request.args.get('collection_name')
-    sort_by = request.args.get('sort_by', 'title')
-    page_info = request.args.get('page_info')
-
-    # ✅ Get Shopify Domain from session
-    shopify_domain = session.get("shopify_domain")
-    if not shopify_domain:
-        print("[ERROR] Missing Shopify domain in session!")
-        return redirect(url_for("login"))  # Redirect to login if missing shop info
-
-    # ✅ Fetch only if products need to be updated
-    products, next_page_url, previous_page_url = fetch_products_from_api(
-        shopify_domain,  # Pass the required Shopify domain
-        limit=50, 
-        product_type=product_type, 
-        vendor=vendor,
-        collection_name=collection_name, 
-        sort_by=sort_by, 
-        page_info=page_info
-    )
-
-    # ✅ Fetch Product Types, Vendors, and Collections
-    product_types = get_cached_product_types(shopify_domain)
-    vendors = get_cached_vendors()
-    collections = get_cached_collections()
-
-    # ✅ Debugging Output
-    print(f"[DEBUG] Vendors: {vendors}")
-    print(f"[DEBUG] Product Types: {product_types}")
-    print(f"[DEBUG] Collections: {collections}")
-
-    # ✅ Store fetched products in session for `next_product`
-    session["cached_products"] = products
-    session["next_page_url"] = next_page_url
-
-    return render_template('products.html',
-                       products=products,
-                       next_page_url=next_page_url,
-                       previous_page_url=previous_page_url,
-                       product_types=product_types,
-                       vendors=vendors,
-                       collections=collections,
-                       product_type=product_type,
-                       vendor=vendor,
-                       segment="product_details",
-                       collection_name=collection_name,
-                       sort_by=sort_by,
-                       shopify_domain=shopify_domain)
-
-
-@app.route('/seo/save_prompt', methods=['POST'])
-def save_prompt():
-    if request.content_type != "application/json":
-        return jsonify({"error": "Request must be JSON"}), 415  # Ensure JSON request
-
-    try:
-        data = request.get_json()
-        new_prompt = data.get("prompt", "").strip()
-
-        if not new_prompt:
-            return jsonify({"error": "Prompt cannot be empty"}), 400
-
-        session["custom_prompt"] = new_prompt  # ✅ Store in session
-        session.modified = True  # ✅ Ensure session updates persist
-
-        print(f"[DEBUG] Custom Prompt Saved: {new_prompt}")  # ✅ Debugging Output
-
-        return jsonify({"success": "Prompt saved successfully!", "prompt": new_prompt})
-
-    except Exception as e:
-        print(f"[ERROR] Failed to save prompt: {str(e)}")
-        return jsonify({"error": f"Failed to save prompt: {str(e)}"}), 500
-
-
-
-
 @app.route('/seo/update_shopify_data')
 @login_required
 def update_shopify_data():
@@ -2153,7 +2083,92 @@ def update_shopify_data():
     flash("Shopify data updated successfully!")
     return redirect(url_for('home'))
 
+@app.route('/seo/')
+def home():
+    print("[DEBUG] Rendering home page")
 
+    product_type = request.args.get('product_type')
+    vendor = request.args.get('vendor')
+    collection_name = request.args.get('collection_name')
+    sort_by = request.args.get('sort_by', 'title')
+    page_info = request.args.get('page_info')
+
+    # ✅ Get Shopify Domain from session
+    shopify_domain = session.get("shopify_domain")
+    if not shopify_domain:
+        print("[ERROR] Missing Shopify domain in session!")
+        return redirect(url_for("login"))
+
+    # ✅ Load user-specific Shopify data
+    user_email = getattr(current_user, "email", None)
+    if not user_email:
+        print("[ERROR] User email not found in session or current_user!")
+        return redirect(url_for("login"))
+
+    user_data = load_shopify_data_for_user(user_email)
+    product_types = user_data.get("product_types", [])
+    vendors = user_data.get("vendors", [])
+    collections = user_data.get("collections", [])
+
+    # ✅ Fetch products from Shopify
+    products, next_page_url, previous_page_url = fetch_products_from_api(
+        shopify_domain,
+        limit=50,
+        product_type=product_type,
+        vendor=vendor,
+        collection_name=collection_name,
+        sort_by=sort_by,
+        page_info=page_info
+    )
+
+    # ✅ Store products for next_product cycling
+    session["cached_products"] = products
+    session["next_page_url"] = next_page_url
+
+    # ✅ Debug output
+    print(f"[DEBUG] Vendors: {vendors}")
+    print(f"[DEBUG] Product Types: {product_types}")
+    print(f"[DEBUG] Collections: {collections}")
+
+    return render_template('products.html',
+        products=products,
+        next_page_url=next_page_url,
+        previous_page_url=previous_page_url,
+        product_types=product_types,
+        vendors=vendors,
+        collections=collections,
+        product_type=product_type,
+        vendor=vendor,
+        segment="product_details",
+        collection_name=collection_name,
+        sort_by=sort_by,
+        shopify_domain=shopify_domain
+    )
+
+
+
+@app.route('/seo/save_prompt', methods=['POST'])
+def save_prompt():
+    if request.content_type != "application/json":
+        return jsonify({"error": "Request must be JSON"}), 415  # Ensure JSON request
+
+    try:
+        data = request.get_json()
+        new_prompt = data.get("prompt", "").strip()
+
+        if not new_prompt:
+            return jsonify({"error": "Prompt cannot be empty"}), 400
+
+        session["custom_prompt"] = new_prompt  # ✅ Store in session
+        session.modified = True  # ✅ Ensure session updates persist
+
+        print(f"[DEBUG] Custom Prompt Saved: {new_prompt}")  # ✅ Debugging Output
+
+        return jsonify({"success": "Prompt saved successfully!", "prompt": new_prompt})
+
+    except Exception as e:
+        print(f"[ERROR] Failed to save prompt: {str(e)}")
+        return jsonify({"error": f"Failed to save prompt: {str(e)}"}), 500
 
 @app.route('/seo/update_seo_details/<product_id>', methods=['POST'])
 def update_seo_details(product_id):
