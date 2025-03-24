@@ -122,27 +122,30 @@ def load_shopify_data_for_user(email):
     return {}  # Return empty dict if no file exists
 
 def update_shopify_data_background(shop, access_token):
-    try:
-        print(f"[BACKGROUND] Starting Shopify data update for {shop}")
+    from flask import current_app
+    with current_app.app_context():
+        try:
+            print(f"[BACKGROUND] Starting Shopify data update for {shop}")
 
-        fresh_product_types = fetch_product_types(shop)
-        fresh_vendors = fetch_vendors(shop, access_token)
-        fresh_collections = fetch_collections(shop)
+            fresh_product_types = fetch_product_types(shop)
+            fresh_vendors = fetch_vendors(shop, access_token)
+            fresh_collections = fetch_collections(shop)
 
-        # ✅ Save to cache
-        cache = load_cache()
-        cache["product_types"]["data"] = fresh_product_types
-        cache["vendors"]["data"] = fresh_vendors
-        cache["collections"]["data"] = fresh_collections
-        cache["product_types"]["timestamp"] = time.time()
-        cache["vendors"]["timestamp"] = time.time()
-        cache["collections"]["timestamp"] = time.time()
-        save_cache(cache)
+            cache = load_cache()
+            cache["product_types"]["data"] = fresh_product_types
+            cache["vendors"]["data"] = fresh_vendors
+            cache["collections"]["data"] = fresh_collections
+            timestamp = time.time()
+            cache["product_types"]["timestamp"] = timestamp
+            cache["vendors"]["timestamp"] = timestamp
+            cache["collections"]["timestamp"] = timestamp
+            save_cache(cache)
 
-        print(f"[BACKGROUND] Finished updating Shopify data for {shop}")
+            print(f"[BACKGROUND] Finished updating Shopify data for {shop}")
 
-    except Exception as e:
-        print(f"[ERROR] Background update failed for {shop}: {e}")
+        except Exception as e:
+            print(f"[ERROR] Background update failed for {shop}: {e}")
+
 
 
 
