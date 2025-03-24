@@ -121,6 +121,30 @@ def load_shopify_data_for_user(email):
             return json.load(f)
     return {}  # Return empty dict if no file exists
 
+def update_shopify_data_background(shop, access_token):
+    try:
+        print(f"[BACKGROUND] Starting Shopify data update for {shop}")
+
+        fresh_product_types = fetch_product_types(shop)
+        fresh_vendors = fetch_vendors(shop, access_token)
+        fresh_collections = fetch_collections(shop)
+
+        # ✅ Save to cache
+        cache = load_cache()
+        cache["product_types"]["data"] = fresh_product_types
+        cache["vendors"]["data"] = fresh_vendors
+        cache["collections"]["data"] = fresh_collections
+        cache["product_types"]["timestamp"] = time.time()
+        cache["vendors"]["timestamp"] = time.time()
+        cache["collections"]["timestamp"] = time.time()
+        save_cache(cache)
+
+        print(f"[BACKGROUND] Finished updating Shopify data for {shop}")
+
+    except Exception as e:
+        print(f"[ERROR] Background update failed for {shop}: {e}")
+
+
 
 # ✅ User Loader for Flask-Login
 @login_manager.user_loader
@@ -2042,45 +2066,35 @@ def fetch_collections(shop):
 @app.route('/seo/update_shopify_data')
 @login_required
 def update_shopify_data():
-    """Fetch fresh data from Shopify and update cache when needed."""
     shop = request.args.get("shopify_domain") or session.get("shopify_domain")
 
     if not shop:
         print("[ERROR] Missing shopify_domain parameter!")
         return jsonify({"error": "Missing shopify_domain parameter"}), 400
 
-    # ✅ Get Access Token from Session or Database
     access_token = session.get("shopify_access_token")
     if not access_token:
-        access_token = get_shopify_access_token(current_user.id)  # Fetch from DB
+        access_token = get_shopify_access_token(current_user.id)
         if access_token:
-            session["shopify_access_token"] = access_token  # Store in session
+            session["shopify_access_token"] = access_token
             session.modified = True
 
     if not access_token:
         print(f"[ERROR] Missing Shopify access token for {shop}!")
         return jsonify({"error": "Missing Shopify access token"}), 400
 
-    print(f"[INFO] Updating Shopify data for {shop}...")
+    print(f"[INFO] Spawning background thread to update Shopify data for {shop}")
 
-    # ✅ Fetch fresh data from Shopify
-    fresh_product_types = fetch_product_types(shop)
-    fresh_vendors = fetch_vendors(shop, access_token)
-    fresh_collections = fetch_collections(shop)
+    # 🔧 Start a background thread
+    threading.Thread(
+        target=update_shopify_data_background,
+        args=(shop, access_token),
+        daemon=True
+    ).start()
 
-    # ✅ Update cache
-    cache = load_cache()
-    cache["product_types"]["data"] = fresh_product_types
-    cache["vendors"]["data"] = fresh_vendors
-    cache["collections"]["data"] = fresh_collections
-    cache["product_types"]["timestamp"] = time.time()
-    cache["vendors"]["timestamp"] = time.time()
-    cache["collections"]["timestamp"] = time.time()
-
-    save_cache(cache)  # ✅ Save updated cache properly
-
-    flash("Shopify data updated successfully!")
+    flash("Shopify data is being updated in the background.")
     return redirect(url_for('home'))
+
 
 @app.route('/seo/')
 def home():
