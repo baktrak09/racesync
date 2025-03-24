@@ -36,6 +36,8 @@ import pickle
 from gunicorn.app.base import BaseApplication
 from celery import Celery
 from flask_caching import Cache
+from threading import Thread
+from flask import current_app
 
 
 
@@ -121,9 +123,8 @@ def load_shopify_data_for_user(email):
             return json.load(f)
     return {}  # Return empty dict if no file exists
 
-def update_shopify_data_background(shop, access_token):
-    from flask import current_app
-    with current_app.app_context():
+def update_shopify_data_background(app, shop, access_token):
+    with app.app_context():
         try:
             print(f"[BACKGROUND] Starting Shopify data update for {shop}")
 
@@ -145,6 +146,7 @@ def update_shopify_data_background(shop, access_token):
 
         except Exception as e:
             print(f"[ERROR] Background update failed for {shop}: {e}")
+
 
 
 
@@ -2070,34 +2072,19 @@ def fetch_collections(shop):
 @login_required
 def update_shopify_data():
     shop = request.args.get("shopify_domain") or session.get("shopify_domain")
-
-    if not shop:
-        print("[ERROR] Missing shopify_domain parameter!")
-        return jsonify({"error": "Missing shopify_domain parameter"}), 400
-
     access_token = session.get("shopify_access_token")
-    if not access_token:
-        access_token = get_shopify_access_token(current_user.id)
-        if access_token:
-            session["shopify_access_token"] = access_token
-            session.modified = True
 
-    if not access_token:
-        print(f"[ERROR] Missing Shopify access token for {shop}!")
-        return jsonify({"error": "Missing Shopify access token"}), 400
+    if not shop or not access_token:
+        print("[ERROR] Missing shop domain or token")
+        return redirect(url_for("home"))
 
     print(f"[INFO] Spawning background thread to update Shopify data for {shop}")
+    
+    # ✅ Pass the app context directly
+    Thread(target=update_shopify_data_background, args=(current_app._get_current_object(), shop, access_token)).start()
 
-    # 🔧 Start a background thread
-    threading.Thread(
-        target=update_shopify_data_background,
-        args=(shop, access_token),
-        daemon=True
-    ).start()
-
-    flash("Shopify data is being updated in the background.")
-    return redirect(url_for('home'))
-
+    flash("Started background data update!")
+    return redirect(url_for("home"))
 
 @app.route('/seo/')
 def home():
