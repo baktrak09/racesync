@@ -36,8 +36,7 @@ import pickle
 from gunicorn.app.base import BaseApplication
 from celery import Celery
 from flask_caching import Cache
-from your_util_file import save_shopify_data_for_user
-from your_util_file import load_shopify_data_for_user
+
 
 
 # ✅ Initialize Flask App
