@@ -39,7 +39,6 @@ from flask_caching import Cache
 from threading import Thread
 from flask import current_app
 from datetime import datetime
-from models import ShopifyCache
 
 
 # ✅ Initialize Flask App
@@ -3581,3 +3580,6 @@ def update_vendors():
     access_token = request.json.get("access_token")
     task = fetch_vendors_task.delay(shopify_domain, access_token)
     return jsonify({"task_id": task.id}), 202
+
+with app.app_context():
+    db.create_all()
