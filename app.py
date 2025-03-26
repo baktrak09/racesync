@@ -38,7 +38,7 @@ from celery import Celery
 from flask_caching import Cache
 from threading import Thread
 from flask import current_app
-
+from datetime import datetime
 
 
 # ✅ Initialize Flask App
@@ -106,47 +106,63 @@ print(f"🔍 [DEBUG] REDIS_URL = {redis_url}")
 # ✅ Import Models AFTER `db` is initialized
 from models import User, Setting
 
-# 🔐 Save Shopify data per user
-def save_shopify_data_for_user(email, data):
-    safe_email = email.replace("@", "_at_").replace(".", "_dot_")
-    os.makedirs("shopify_user_data", exist_ok=True)
-    path = os.path.join("shopify_user_data", f"{safe_email}_shopify_data.json")
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
 
-# 🔓 Load Shopify data per user
-def load_shopify_data_for_user(email):
-    safe_email = email.replace("@", "_at_").replace(".", "_dot_")
-    path = os.path.join("shopify_user_data", f"{safe_email}_shopify_data.json")
-    if os.path.exists(path):
-        with open(path, "r") as f:
-            return json.load(f)
-    return {}  # Return empty dict if no file exists
 
-def update_shopify_data_background(app, shop, access_token):
+def update_shopify_data_background(app, shop, access_token, email):
     with app.app_context():
         try:
-            print(f"[BACKGROUND] Starting Shopify data update for {shop}")
+            print(f"[BACKGROUND] Starting Shopify data update for {shop} / {email}")
 
             fresh_product_types = fetch_product_types(shop)
             fresh_vendors = fetch_vendors(shop, access_token)
             fresh_collections = fetch_collections(shop)
 
-            cache = load_cache()
-            cache["product_types"]["data"] = fresh_product_types
-            cache["vendors"]["data"] = fresh_vendors
-            cache["collections"]["data"] = fresh_collections
-            timestamp = time.time()
-            cache["product_types"]["timestamp"] = timestamp
-            cache["vendors"]["timestamp"] = timestamp
-            cache["collections"]["timestamp"] = timestamp
-            save_cache(cache)
+            save_shopify_cache(email, fresh_product_types, fresh_vendors, fresh_collections)
 
-            print(f"[BACKGROUND] Finished updating Shopify data for {shop}")
+            print(f"[BACKGROUND] Finished updating Shopify data for {shop} / {email}")
 
         except Exception as e:
             print(f"[ERROR] Background update failed for {shop}: {e}")
 
+
+
+
+
+
+
+def save_shopify_cache(email, product_types, vendors, collections):
+    existing = ShopifyCache.query.filter_by(user_email=email).first()
+
+    if not existing:
+        existing = ShopifyCache(user_email=email)
+
+    existing.product_types = product_types
+    existing.vendors = vendors
+    existing.collections = collections
+    existing.updated_at = datetime.utcnow()
+
+    db.session.add(existing)
+    db.session.commit()
+    print(f"[INFO] Cache saved to DB for {email}")
+
+
+def load_shopify_cache(email):
+    cache = ShopifyCache.query.filter_by(user_email=email).first()
+
+    if cache:
+        return {
+            "product_types": cache.product_types or [],
+            "vendors": cache.vendors or [],
+            "collections": cache.collections or [],
+            "updated_at": cache.updated_at
+        }
+
+    return {
+        "product_types": [],
+        "vendors": [],
+        "collections": [],
+        "updated_at": None
+    }
 
 
 
@@ -923,21 +939,6 @@ def load_cache():
         "collections": {"data": [], "timestamp": 0}
     }
 
-def save_cache(data):
-    """Save cached data to a JSON file."""
-    try:
-        with open(CACHE_FILE, "w") as file:
-            json.dump(data, file, indent=4)
-        print("[INFO] Cache saved successfully.")
-    except Exception as e:
-        print(f"[ERROR] Failed to save cache: {e}")
-
-# ✅ Initialize cache
-CACHE = {
-    "product_types": {"data": [], "timestamp": 0},
-    "vendors": {"data": [], "timestamp": 0},  # <-- Fix: Ensure 'vendors' exists
-    "collections": {"data": [], "timestamp": 0}
-}
 
 
 @cache.cached(timeout=3600, key_prefix='product_types')
@@ -2108,10 +2109,11 @@ def home():
         print("[ERROR] User email not found in session or current_user!")
         return redirect(url_for("login"))
 
-    user_data = load_shopify_data_for_user(user_email)
+    user_data = load_shopify_cache(user_email)
     product_types = user_data.get("product_types", [])
     vendors = user_data.get("vendors", [])
     collections = user_data.get("collections", [])
+
 
     # ✅ Fetch products from Shopify
     products, next_page_url, previous_page_url = fetch_products_from_api(
