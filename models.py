@@ -6,7 +6,7 @@ from datetime import datetime
 from app import db
 from sqlalchemy import Column, Integer, String, JSON  # Add 'Column' and 'JSON'
 from sqlalchemy.ext.declarative import declarative_base
-
+from datetime import datetime
 
 
 class User(db.Model, UserMixin):
@@ -37,6 +37,17 @@ class Product(db.Model):
     name = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=True)
     price = db.Column(db.Float, nullable=False)
+
+
+
+class ShopifyCache(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_email = db.Column(db.String, unique=True)  # Or shop domain, whatever you're using to identify users
+    product_types = db.Column(db.JSON)
+    vendors = db.Column(db.JSON)
+    collections = db.Column(db.JSON)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 
 class OrderStatus(enum.Enum):
     PENDING = 'Pending'
