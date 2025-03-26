@@ -39,6 +39,7 @@ from flask_caching import Cache
 from threading import Thread
 from flask import current_app
 from datetime import datetime
+from models import ShopifyCache
 
 
 # ✅ Initialize Flask App
