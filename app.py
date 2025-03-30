@@ -1949,62 +1949,62 @@ def fetch_product_types(shop):
         print(f"[ERROR] Failed to fetch product types for {shop}: {e}")
         return []
 
-def fetch_vendors(shopify_domain, access_token, max_pages=50):
-    headers = {"X-Shopify-Access-Token": access_token}
+def fetch_vendors(shop, access_token):
+    shop = shop.replace("https://", "").replace("http://", "").strip("/")
+    print(f"[DEBUG] Starting fetch_vendors for {shop}")
+
     vendors = set()
-    next_page_info = None
-    retry_attempts = 5  # Max retries for rate limits
-    page_count = 0
-    # 🛠️ Normalize domain
-    shopify_domain = shopify_domain.replace("https://", "").replace("http://", "").strip("/")
+    endpoint = f"https://{shop}/admin/api/2024-01/products.json"
+    headers = {
+        "X-Shopify-Access-Token": access_token
+    }
+    params = {
+        "limit": 250,
+        "fields": "vendor"
+    }
 
     while True:
-        url = f"https://{shopify_domain}/admin/api/2024-01/products.json?limit=100&fields=vendor"
-        if next_page_info:
-            url += f"&page_info={next_page_info}"
+        try:
+            response = requests.get(endpoint, headers=headers, params=params)
+            if response.status_code == 429:
+                print("[WARN] Rate limited by Shopify. Backing off...")
+                time.sleep(3)
+                continue
 
-        for attempt in range(retry_attempts):
-            try:
-                response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
 
-                # Handle rate limits (429)
-                if response.status_code == 429:
-                    retry_after = int(response.headers.get("Retry-After", "2"))
-                    wait_time = max(retry_after, 2 ** attempt)  # Exponential backoff
-                    print(f"[WARNING] Rate limit hit. Retrying in {wait_time} seconds...")
-                    time.sleep(wait_time)
+            products = data.get("products", [])
+            print(f"[DEBUG] Retrieved {len(products)} products")
+
+            for product in products:
+                vendor = product.get("vendor", "").strip()
+                if vendor:
+                    vendors.add(vendor)
+
+            # Check for pagination via Link header
+            link_header = response.headers.get("Link", "")
+            if 'rel="next"' in link_header:
+                # Shopify uses rel="next" with a page_info param
+                next_url = None
+                parts = link_header.split(',')
+                for part in parts:
+                    if 'rel="next"' in part:
+                        next_url = part.split(";")[0].strip().strip("<>")
+                        break
+                if next_url:
+                    endpoint = next_url
+                    params = None  # URL already includes page_info
                     continue
-
-                # Handle server errors (500, 502, 503, 504)
-                elif response.status_code in [500, 502, 503, 504]:
-                    print(f"[WARNING] Server error {response.status_code}. Retrying in 5 seconds...")
-                    time.sleep(5)
-                    continue
-
-                response.raise_for_status()
-                break  # Exit retry loop on success
-
-            except requests.exceptions.RequestException as e:
-                print(f"[ERROR] Shopify API request failed: {e}")
-                return sorted(list(vendors))  # Return whatever vendors we have so far
-
-        # Parse the response
-        data = response.json()
-        for product in data.get("products", []):
-            vendors.add(product.get("vendor", "").strip())
-
-        # Check for pagination
-        link_header = response.headers.get("Link")
-        if link_header and 'rel="next"' in link_header:
-            next_page_info = link_header.split("page_info=")[-1].split(">")[0]
-            page_count += 1
-            if page_count >= max_pages:
-                print("[INFO] Reached max pages limit.")
-                break
-        else:
             break
 
-    return sorted(list(vendors))
+        except Exception as e:
+            print(f"[ERROR] Failed to fetch vendors: {e}")
+            break
+
+    vendor_list = sorted(vendors)
+    print(f"[DEBUG] Unique vendors fetched: {len(vendor_list)}")
+    return vendor_list
 
 def fetch_collections(shop):
     """Fetch all collections from Shopify with rate limit handling and pagination."""
