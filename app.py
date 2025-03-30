@@ -1954,18 +1954,14 @@ def fetch_vendors(shop, access_token):
     print(f"[DEBUG] Starting fetch_vendors for {shop}")
 
     vendors = set()
-    endpoint = f"https://{shop}/admin/api/2024-01/products.json"
+    url = f"https://{shop}/admin/api/2024-01/products.json?limit=250&fields=vendor"
     headers = {
         "X-Shopify-Access-Token": access_token
     }
-    params = {
-        "limit": 250,
-        "fields": "vendor"
-    }
 
-    while True:
+    while url:
         try:
-            response = requests.get(endpoint, headers=headers, params=params)
+            response = requests.get(url, headers=headers)
             if response.status_code == 429:
                 print("[WARN] Rate limited by Shopify. Backing off...")
                 time.sleep(3)
@@ -1982,21 +1978,13 @@ def fetch_vendors(shop, access_token):
                 if vendor:
                     vendors.add(vendor)
 
-            # Check for pagination via Link header
+            # Properly handle pagination with full URL override
             link_header = response.headers.get("Link", "")
             if 'rel="next"' in link_header:
-                # Shopify uses rel="next" with a page_info param
-                next_url = None
-                parts = link_header.split(',')
-                for part in parts:
-                    if 'rel="next"' in part:
-                        next_url = part.split(";")[0].strip().strip("<>")
-                        break
-                if next_url:
-                    endpoint = next_url
-                    params = None  # URL already includes page_info
-                    continue
-            break
+                match = re.search(r'<([^<>]*)>; rel="next"', link_header)
+                url = match.group(1) if match else None
+            else:
+                url = None
 
         except Exception as e:
             print(f"[ERROR] Failed to fetch vendors: {e}")
@@ -2005,6 +1993,7 @@ def fetch_vendors(shop, access_token):
     vendor_list = sorted(vendors)
     print(f"[DEBUG] Unique vendors fetched: {len(vendor_list)}")
     return vendor_list
+
 
 def fetch_collections(shop):
     """Fetch all collections from Shopify with rate limit handling and pagination."""
