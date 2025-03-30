@@ -1264,27 +1264,28 @@ if not ftp_host or not ftp_user or not ftp_pass:
     if not FTP_CREDENTIALS:
         print("[WARNING] Missing FTP credentials. Some features may not work.")
 
-def connect_to_ftp():
-    """Establish FTP connection using credentials from the database."""
-    ftp_host, ftp_user, ftp_pass = get_ftp_credentials()
+def connect_to_ftp(user_id):
+    """Establish FTP connection using user-specific credentials."""
+    creds = get_user_ftp_credentials(user_id)
 
-    if not ftp_host or not ftp_user or not ftp_pass:
-        raise ValueError("Missing FTP credentials from database")
+    if not creds["FTP_HOST"] or not creds["FTP_USER"] or not creds["FTP_PASS"]:
+        raise ValueError("Missing FTP credentials from database or environment.")
 
     try:
-        ftp = FTP(ftp_host)
-        ftp.login(ftp_user, ftp_pass)
+        ftp = FTP(creds["FTP_HOST"])
+        ftp.login(creds["FTP_USER"], creds["FTP_PASS"])
         print("[DEBUG] Connected to FTP successfully!")
         return ftp
     except Exception as e:
         print(f"[ERROR] Failed to connect to FTP: {e}")
         return None
 
-def download_csv_from_ftp():
-    """Download CSV inventory file from FTP server using credentials from the database."""
+
+def download_csv_from_ftp(user_id):
+    """Download CSV inventory file from FTP server using user credentials."""
     print("Connecting to FTP server...")
-    
-    ftp = connect_to_ftp()
+
+    ftp = connect_to_ftp(user_id)
     if not ftp:
         return False
 
@@ -1303,6 +1304,7 @@ def download_csv_from_ftp():
     except Exception as e:
         print(f"[ERROR] Failed to download from FTP: {e}")
         return False
+
 
 @app.route('/inventory/download_csv', methods=['POST'])
 def handle_download_csv():
@@ -1440,7 +1442,7 @@ def trigger_update():
         profiler.enable()
 
         # ✅ Download supplier CSV
-        if not download_csv_from_ftp():
+        if not download_csv_from_ftp(user.id):
             return jsonify({"status": "error", "message": "Failed to download CSV file from FTP server."}), 500
         print("✅ CSV downloaded successfully, proceeding with updates...")
 
