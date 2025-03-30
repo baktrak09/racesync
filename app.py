@@ -43,7 +43,7 @@ from datetime import datetime
 # ✅ Initialize Flask App
 app = Flask(__name__)
 
-# ✅ Load Environment Variables
+# ✅ Load and fix DB URI
 db_url = os.getenv("SQLALCHEMY_DATABASE_URI")
 if "?sslmode=" in db_url:
     db_url = db_url.replace("?sslmode=prefer", "?sslmode=require")
@@ -59,24 +59,21 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_pre_ping": True,
 }
 
-redis_url = os.getenv("REDIS_URL")
+# ✅ Redis Session Config
+redis_url = os.getenv("REDIS_URL", "").replace("rediss://", "redis://")
 if not redis_url:
     raise ValueError("❌ ERROR: REDIS_URL is NOT set!")
-redis_url = redis_url.replace("rediss://", "redis://")
 
-# ✅ Session Config
-app.config["SESSION_TYPE"] = "redis"
-app.config["SESSION_PERMANENT"] = True
-app.config["SESSION_USE_SIGNER"] = True
-app.config["SESSION_KEY_PREFIX"] = "racesync_session:"
-app.config["SESSION_REDIS"] = redis.StrictRedis.from_url(redis_url)
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
-app.config["SESSION_SERIALIZATION_METHOD"] = pickle
-
-# ✅ Secret Key
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "fallback_secret_key")
-if not os.getenv("FLASK_SECRET_KEY"):
-    print("⚠️ WARNING: FLASK_SECRET_KEY is NOT set! Using fallback secret key.")
+app.config.update({
+    "SESSION_TYPE": "redis",
+    "SESSION_PERMANENT": True,
+    "SESSION_USE_SIGNER": True,
+    "SESSION_KEY_PREFIX": "racesync_session:",
+    "SESSION_REDIS": redis.StrictRedis.from_url(redis_url),
+    "PERMANENT_SESSION_LIFETIME": timedelta(days=7),
+    "SESSION_SERIALIZATION_METHOD": pickle,
+    "SECRET_KEY": os.getenv("FLASK_SECRET_KEY", "fallback_secret_key")
+})
 
 # ✅ Initialize Extensions
 db = SQLAlchemy(app)
@@ -88,10 +85,10 @@ Session(app)
 oauth = OAuth(app)
 cache = Cache(app, config={'CACHE_TYPE': 'SimpleCache'})
 
-# ✅ Now we can safely import models
-from models import ShopifyCache, User, Setting  # 👈 moved down here
+# ✅ Import models AFTER db is initialized
+from models import ShopifyCache, User, Setting
 
-# ✅ Debugging
+# ✅ Debug output
 print(f"🔍 [DEBUG] SQLALCHEMY_DATABASE_URI = {db_url}")
 print(f"🔍 [DEBUG] REDIS_URL = {redis_url}")
 
