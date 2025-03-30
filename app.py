@@ -359,6 +359,7 @@ def login():
         if user and check_password_hash(user.password_hash, password):
             login_user(user)
             session['user_id'] = user.id  # Set session user_id
+            session['email'] = user.email  # ✅ Add this to store the email in session
             return redirect(url_for('inventory'))
 
         flash("Invalid credentials!", "danger")
@@ -2068,7 +2069,9 @@ def update_shopify_data():
 
     print(f"[INFO] Spawning background thread to update Shopify data for {shop}")
     
-    Thread(target=update_shopify_data_background, args=(current_app._get_current_object(), shop, access_token)).start()
+    email = session.get("email")
+    Thread(target=update_shopify_data_background, args=(current_app._get_current_object(), shop, access_token, email)).start()
+
 
     flash("Started background data update!")
     return redirect(url_for("home"))
