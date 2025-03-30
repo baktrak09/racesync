@@ -1952,6 +1952,8 @@ def fetch_vendors(shopify_domain, access_token, max_pages=50):
     next_page_info = None
     retry_attempts = 5  # Max retries for rate limits
     page_count = 0
+    # 🛠️ Normalize domain
+    shopify_domain = shopify_domain.replace("https://", "").replace("http://", "").strip("/")
 
     while True:
         url = f"https://{shopify_domain}/admin/api/2024-01/products.json?limit=100&fields=vendor"
