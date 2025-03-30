@@ -1103,7 +1103,8 @@ def inventory():
     # Fetch Shopify location ID
     location_id = get_shopify_location_id(shopify_domain, shopify_token)
 
-    return render_template("index.html", location_id=location_id)
+    return render_template("index.html", location_id=location_id, shopify_domain=shopify_domain)
+
 
 
 
