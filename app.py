@@ -2060,7 +2060,7 @@ def fetch_collections(shop):
 @login_required
 def update_shopify_data():
     shop = request.args.get("shopify_domain") or session.get("shopify_domain")
-    access_token = session.get("shopify_access_token")
+    access_token = session.get("shopify_token")  # ✅ corrected key
 
     if not shop or not access_token:
         print("[ERROR] Missing shop domain or token")
@@ -2068,11 +2068,11 @@ def update_shopify_data():
 
     print(f"[INFO] Spawning background thread to update Shopify data for {shop}")
     
-    # ✅ Pass the app context directly
     Thread(target=update_shopify_data_background, args=(current_app._get_current_object(), shop, access_token)).start()
 
     flash("Started background data update!")
     return redirect(url_for("home"))
+
 
 @app.route('/seo/')
 def home():
