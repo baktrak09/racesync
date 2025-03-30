@@ -98,6 +98,9 @@ print(f"🔍 [DEBUG] REDIS_URL = {redis_url}")
 def update_shopify_data_background(app, shop, access_token, email):
     with app.app_context():
         try:
+            # 🔧 Clean up domain
+            shop = shop.replace("https://", "").replace("http://", "").strip("/")
+
             print(f"[BACKGROUND] Starting Shopify data update for {shop} / {email}")
 
             fresh_product_types = fetch_product_types(shop)
