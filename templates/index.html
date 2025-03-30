@@ -91,11 +91,14 @@ document.getElementById('process-inventory-update').addEventListener('click', fu
     statusText.textContent = 'Process has started... This could take several hours!';
 
     fetch('/inventory/trigger_update', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+        shopify_domain: "{{ shopify_domain }}"
     })
+})
     .then(response => response.json())
     .then(data => {
         if (data.status === "success") {

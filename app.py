@@ -1416,45 +1416,72 @@ def bulk_update_inventory(shop, df, shopify_skus, location_id):
 
 @app.route('/inventory/trigger_update', methods=['POST'])
 def trigger_update():
-    print("Triggering the inventory and pricing update process...")
+    print("🟡 Triggering the inventory and pricing update process...")
+
     try:
+        # ✅ Safely parse JSON
+        shop = None
+        if request.is_json:
+            data = request.get_json()
+            shop = data.get("shopify_domain")
+        
+        if not shop:
+            return jsonify({"status": "error", "message": "Missing shopify_domain in request."}), 400
+
+        print(f"✅ [DEBUG] Shopify Domain: {shop}")
+
+        user = User.query.filter_by(shopify_domain=shop).first()
+        if not user:
+            return jsonify({"status": "error", "message": "Shopify store not found."}), 404
+
+        # ✅ Start profiler
         profiler = cProfile.Profile()
         profiler.enable()
 
-        shop = request.json.get("shopify_domain")  # ✅ Get shop from request
-        user = User.query.filter_by(shopify_domain=shop).first()
-        if not user:
-            return jsonify({"status": "error", "message": "Shopify store not found."}), 500
-
+        # ✅ Download supplier CSV
         if not download_csv_from_ftp():
             return jsonify({"status": "error", "message": "Failed to download CSV file from FTP server."}), 500
-
         print("✅ CSV downloaded successfully, proceeding with updates...")
+
+        # ✅ Get location ID
         location_id = get_shopify_location_id(shop)
         if not location_id:
             return jsonify({"status": "error", "message": "Failed to fetch location ID from Shopify."}), 500
+        print(f"✅ Shopify Location ID: {location_id}")
 
+        # ✅ Fetch SKUs from Shopify
         print("✅ Fetching SKUs from Shopify...")
         shopify_skus = fetch_shopify_skus_concurrent(shop)
         if not shopify_skus:
             return jsonify({"status": "error", "message": "Failed to fetch SKUs from Shopify."}), 500
         print(f"✅ Fetched {len(shopify_skus)} SKUs from Shopify.")
 
+        # ✅ Load local CSV
         df = load_csv()
         if df is None:
             return jsonify({"status": "error", "message": "CSV data could not be loaded."}), 500
+        print("✅ CSV loaded into DataFrame.")
 
+        # ✅ Bulk update inventory and pricing
         print("✅ Starting bulk update of inventory and pricing...")
         matched_count, total_skus = bulk_update_inventory(shop, df, shopify_skus, location_id)
         print(f"✅ Completed bulk update. Matched {matched_count} SKUs out of {total_skus}.")
 
+        # ✅ Stop profiler and print results
         profiler.disable()
         profiler.print_stats(sort='time')
 
-        return jsonify({"status": "success", "message": "Inventory and pricing updated successfully!", "matched_count": matched_count, "total_skus": total_skus})
+        return jsonify({
+            "status": "success",
+            "message": "Inventory and pricing updated successfully!",
+            "matched_count": matched_count,
+            "total_skus": total_skus
+        })
+
     except Exception as e:
         print(f"❌ An error occurred: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 
 
