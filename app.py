@@ -39,14 +39,11 @@ from flask_caching import Cache
 from threading import Thread
 from flask import current_app
 from datetime import datetime
-from models import ShopifyCache
-
 
 # ✅ Initialize Flask App
 app = Flask(__name__)
 
 # ✅ Load Environment Variables
-
 db_url = os.getenv("SQLALCHEMY_DATABASE_URI")
 if "?sslmode=" in db_url:
     db_url = db_url.replace("?sslmode=prefer", "?sslmode=require")
@@ -54,41 +51,32 @@ else:
     db_url += "?sslmode=require"
 
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
-
-# 🔧 Add Pooling & Recycle Settings
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_size": 10,  # Adjust based on workload
+    "pool_size": 10,
     "max_overflow": 20,
-    "pool_timeout": 30,  # Time before timeout error
-    "pool_recycle": 280,  # Recycle connections to prevent timeout
-    "pool_pre_ping": True,  # Check connection health before using it
+    "pool_timeout": 30,
+    "pool_recycle": 280,
+    "pool_pre_ping": True,
 }
-
-
 
 redis_url = os.getenv("REDIS_URL")
 if not redis_url:
     raise ValueError("❌ ERROR: REDIS_URL is NOT set!")
+redis_url = redis_url.replace("rediss://", "redis://")
 
-redis_url = redis_url.replace("rediss://", "redis://")  # Ensure it's using the correct format
-
-# ✅ Use Redis for Flask-Session
+# ✅ Session Config
 app.config["SESSION_TYPE"] = "redis"
 app.config["SESSION_PERMANENT"] = True
 app.config["SESSION_USE_SIGNER"] = True
 app.config["SESSION_KEY_PREFIX"] = "racesync_session:"
 app.config["SESSION_REDIS"] = redis.StrictRedis.from_url(redis_url)
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
+app.config["SESSION_SERIALIZATION_METHOD"] = pickle
 
-# ✅ Use Pickle for Serialization Instead of JSON
-app.config["SESSION_SERIALIZATION_METHOD"] = pickle  # This ensures the session data is stored in the correct format
-
-# ✅ Ensure SECRET_KEY is properly set
+# ✅ Secret Key
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "fallback_secret_key")
-
 if not os.getenv("FLASK_SECRET_KEY"):
     print("⚠️ WARNING: FLASK_SECRET_KEY is NOT set! Using fallback secret key.")
-
 
 # ✅ Initialize Extensions
 db = SQLAlchemy(app)
@@ -100,12 +88,13 @@ Session(app)
 oauth = OAuth(app)
 cache = Cache(app, config={'CACHE_TYPE': 'SimpleCache'})
 
-# ✅ Debugging Output
+# ✅ Now we can safely import models
+from models import ShopifyCache, User, Setting  # 👈 moved down here
+
+# ✅ Debugging
 print(f"🔍 [DEBUG] SQLALCHEMY_DATABASE_URI = {db_url}")
 print(f"🔍 [DEBUG] REDIS_URL = {redis_url}")
 
-# ✅ Import Models AFTER `db` is initialized
-from models import User, Setting
 
 
 
