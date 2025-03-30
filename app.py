@@ -1427,6 +1427,8 @@ def trigger_update():
         if request.is_json:
             data = request.get_json()
             shop = data.get("shopify_domain")
+            token = user.access_token  # or session.get("shopify_token") if not stored on user
+
         
         if not shop:
             return jsonify({"status": "error", "message": "Missing shopify_domain in request."}), 400
@@ -1447,7 +1449,7 @@ def trigger_update():
         print("✅ CSV downloaded successfully, proceeding with updates...")
 
         # ✅ Get location ID
-        location_id = get_shopify_location_id(shop)
+        location_id = get_shopify_location_id(shop, token)
         if not location_id:
             return jsonify({"status": "error", "message": "Failed to fetch location ID from Shopify."}), 500
         print(f"✅ Shopify Location ID: {location_id}")
