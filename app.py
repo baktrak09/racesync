@@ -38,7 +38,7 @@ from celery import Celery
 from flask_caching import Cache
 from threading import Thread
 from flask import current_app
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # ✅ Initialize Flask App
 app = Flask(__name__)
@@ -59,10 +59,9 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_pre_ping": True,
 }
 
-# ✅ Redis Session Config
-redis_url = os.getenv("REDIS_URL", "").replace("rediss://", "redis://")
-if not redis_url:
-    raise ValueError("❌ ERROR: REDIS_URL is NOT set!")
+# ✅ Redis Session Config (Hardcoded Upstash URL)
+redis_url = "redis://default:AcsbAAIjcDFkZmRhMDc2MWZlZjA0NTA3OGJiNzI4ODYwNTRmMGNjMXAxMA@large-bull-51995.upstash.io:6379"
+
 
 app.config.update({
     "SESSION_TYPE": "redis",
@@ -1422,74 +1421,24 @@ def bulk_update_inventory(shop, df, shopify_skus, location_id):
 
 @app.route('/inventory/trigger_update', methods=['POST'])
 def trigger_update():
-    print("🟡 Triggering the inventory and pricing update process...")
+    print("🟡 Triggering inventory/pricing update via background task...")
+    shop = None
+    if request.is_json:
+        data = request.get_json()
+        shop = data.get("shopify_domain")
 
+    if not shop:
+        return jsonify({"status": "error", "message": "Missing shopify_domain in request."}), 400
+
+    # ✅ Queue the task with RQ
     try:
-        # ✅ Parse the JSON safely
-        shop = None
-        if request.is_json:
-            data = request.get_json()
-            shop = data.get("shopify_domain")
-        
-        if not shop:
-            return jsonify({"status": "error", "message": "Missing shopify_domain in request."}), 400
-
-        print(f"✅ [DEBUG] Shopify Domain: {shop}")
-
-        # ✅ Fetch user
-        user = User.query.filter_by(shopify_domain=shop).first()
-        if not user:
-            return jsonify({"status": "error", "message": "Shopify store not found."}), 404
-
-        token = user.access_token  # ✅ Now this is safe
-
-        # ✅ Start performance profiling
-        profiler = cProfile.Profile()
-        profiler.enable()
-
-        # ✅ Download supplier CSV
-        if not download_csv_from_ftp(user.id):
-            return jsonify({"status": "error", "message": "Failed to download CSV file from FTP server."}), 500
-        print("✅ CSV downloaded successfully, proceeding with updates...")
-
-        # ✅ Get location ID
-        location_id = get_shopify_location_id(shop, token)
-        if not location_id:
-            return jsonify({"status": "error", "message": "Failed to fetch location ID from Shopify."}), 500
-        print(f"✅ Shopify Location ID: {location_id}")
-
-        # ✅ Fetch SKUs from Shopify
-        print("✅ Fetching SKUs from Shopify...")
-        shopify_skus = fetch_shopify_skus_concurrent(shop)
-        if not shopify_skus:
-            return jsonify({"status": "error", "message": "Failed to fetch SKUs from Shopify."}), 500
-        print(f"✅ Fetched {len(shopify_skus)} SKUs from Shopify.")
-
-        # ✅ Load the CSV file into a DataFrame
-        df = load_csv()
-        if df is None:
-            return jsonify({"status": "error", "message": "CSV data could not be loaded."}), 500
-        print("✅ CSV loaded into DataFrame.")
-
-        # ✅ Bulk update inventory and pricing
-        print("✅ Starting bulk update of inventory and pricing...")
-        matched_count, total_skus = bulk_update_inventory(shop, df, shopify_skus, location_id)
-        print(f"✅ Completed bulk update. Matched {matched_count} SKUs out of {total_skus}.")
-
-        # ✅ Stop profiler and print stats
-        profiler.disable()
-        profiler.print_stats(sort='time')
-
-        return jsonify({
-            "status": "success",
-            "message": "Inventory and pricing updated successfully!",
-            "matched_count": matched_count,
-            "total_skus": total_skus
-        })
-
+        queue.enqueue(run_inventory_update, shop)
+        print(f"✅ Task queued for {shop}")
+        return jsonify({"status": "queued", "message": f"Inventory update started in background for {shop}."})
     except Exception as e:
-        print(f"❌ An error occurred: {str(e)}")
-        return jsonify({"status": "error", "message": str(e)}), 500
+        print(f"❌ Failed to enqueue task: {e}")
+        return jsonify({"status": "error", "message": "Failed to start background task."}), 500
+
 
 
 
@@ -3585,6 +3534,39 @@ def fetch_paginated_data_concurrently(base_url, headers, max_pages=50):
             else:
                 break
     return results
+
+def run_inventory_update(shop):
+    print(f"🟡 [RQ] Running background update for: {shop}")
+    
+    user = User.query.filter_by(shopify_domain=shop).first()
+    if not user:
+        print(f"❌ [RQ] No user found for {shop}")
+        return
+
+    access_token = user.shopify_token
+
+    if not download_csv_from_ftp():
+        print("❌ [RQ] Failed to download CSV file.")
+        return
+
+    location_id = get_shopify_location_id(shop, access_token)
+    if not location_id:
+        print("❌ [RQ] Could not fetch Shopify Location ID.")
+        return
+
+    shopify_skus = fetch_shopify_skus_concurrent(shop)
+    if not shopify_skus:
+        print("❌ [RQ] Failed to fetch SKUs.")
+        return
+
+    df = load_csv()
+    if df is None:
+        print("❌ [RQ] Failed to load CSV.")
+        return
+
+    matched_count, total_skus = bulk_update_inventory(shop, df, shopify_skus, location_id)
+    print(f"✅ [RQ] Inventory update complete. Matched {matched_count} out of {total_skus}.")
+
 
 celery = Celery(app.name, broker='redis://localhost:6379/0')
 
