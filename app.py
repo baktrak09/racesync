@@ -1422,24 +1422,25 @@ def trigger_update():
     print("🟡 Triggering the inventory and pricing update process...")
 
     try:
-        # ✅ Safely parse JSON
+        # ✅ Parse the JSON safely
         shop = None
         if request.is_json:
             data = request.get_json()
             shop = data.get("shopify_domain")
-            token = user.access_token  # or session.get("shopify_token") if not stored on user
-
         
         if not shop:
             return jsonify({"status": "error", "message": "Missing shopify_domain in request."}), 400
 
         print(f"✅ [DEBUG] Shopify Domain: {shop}")
 
+        # ✅ Fetch user
         user = User.query.filter_by(shopify_domain=shop).first()
         if not user:
             return jsonify({"status": "error", "message": "Shopify store not found."}), 404
 
-        # ✅ Start profiler
+        token = user.access_token  # ✅ Now this is safe
+
+        # ✅ Start performance profiling
         profiler = cProfile.Profile()
         profiler.enable()
 
@@ -1461,7 +1462,7 @@ def trigger_update():
             return jsonify({"status": "error", "message": "Failed to fetch SKUs from Shopify."}), 500
         print(f"✅ Fetched {len(shopify_skus)} SKUs from Shopify.")
 
-        # ✅ Load local CSV
+        # ✅ Load the CSV file into a DataFrame
         df = load_csv()
         if df is None:
             return jsonify({"status": "error", "message": "CSV data could not be loaded."}), 500
@@ -1472,7 +1473,7 @@ def trigger_update():
         matched_count, total_skus = bulk_update_inventory(shop, df, shopify_skus, location_id)
         print(f"✅ Completed bulk update. Matched {matched_count} SKUs out of {total_skus}.")
 
-        # ✅ Stop profiler and print results
+        # ✅ Stop profiler and print stats
         profiler.disable()
         profiler.print_stats(sort='time')
 
