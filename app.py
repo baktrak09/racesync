@@ -1123,6 +1123,8 @@ def get_shopify_skus_api():
 
 def fetch_shopify_skus_concurrent(shop):
     """Fetch all Shopify SKUs using concurrent requests."""
+    shop = shop.replace("https://", "").replace("http://", "").strip("/")  # 🔧 sanitize URL
+
     user = User.query.filter_by(shopify_domain=shop).first()
     if not user:
         raise ValueError(f"🚨 Shopify store not found for {shop}.")
@@ -1132,6 +1134,7 @@ def fetch_shopify_skus_concurrent(shop):
     page_info = None
     products_fetched = 0
     pages_fetched = 0
+
 
     def fetch_url(url):
         try:
