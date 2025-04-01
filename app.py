@@ -1429,17 +1429,19 @@ def bulk_update_inventory(shop, df, shopify_skus, location_id):
 
 
 
-@app.route("/inventory/trigger_update", methods=["POST"])
+@app.route('/inventory/trigger_update', methods=['POST'])
 def trigger_update():
+    print("🟡 Triggering inventory/pricing update via background task...")
     try:
-        print("🟡 Triggering inventory/pricing update via background task...")
+        shop = None
+        if request.is_json:
+            shop = request.get_json().get("shopify_domain")
 
-        shop = request.get_json().get("shopify_domain")
         if not shop:
-            return jsonify({"status": "error", "message": "Missing shopify_domain"}), 400
+            return jsonify({"status": "error", "message": "Missing shopify_domain in request."}), 400
 
-        task = run_inventory_update.delay(shop)  # 🎯 Here’s the fix – using `celery` task
-        return jsonify({"status": "success", "message": "Background task started!", "task_id": task.id})
+        task = celery.tasks["run_inventory_update"].delay(shop)
+        return jsonify({"status": "success", "message": "Task started", "task_id": task.id})
 
     except Exception as e:
         print(f"❌ Failed to enqueue task: {e}")
@@ -3548,37 +3550,35 @@ def fetch_paginated_data_concurrently(base_url, headers, max_pages=50):
                 break
     return results
 
+@celery.task(name="run_inventory_update")
 def run_inventory_update(shop):
-    print(f"🟡 [RQ] Running background update for: {shop}")
-    
+    from app import User, get_shopify_location_id, fetch_shopify_skus_concurrent, download_csv_from_ftp, load_csv, bulk_update_inventory
+
+    print(f"[CELERY TASK] Running inventory update for {shop}")
+
     user = User.query.filter_by(shopify_domain=shop).first()
     if not user:
-        print(f"❌ [RQ] No user found for {shop}")
-        return
+        raise ValueError(f"Shopify store not found: {shop}")
 
-    access_token = user.shopify_token
-
+    # Download supplier CSV
     if not download_csv_from_ftp():
-        print("❌ [RQ] Failed to download CSV file.")
-        return
+        raise Exception("Failed to download CSV from FTP")
 
-    location_id = get_shopify_location_id(shop, access_token)
+    location_id = get_shopify_location_id(shop)
     if not location_id:
-        print("❌ [RQ] Could not fetch Shopify Location ID.")
-        return
+        raise Exception("Failed to get Shopify location ID")
 
     shopify_skus = fetch_shopify_skus_concurrent(shop)
     if not shopify_skus:
-        print("❌ [RQ] Failed to fetch SKUs.")
-        return
+        raise Exception("Failed to fetch SKUs from Shopify")
 
     df = load_csv()
     if df is None:
-        print("❌ [RQ] Failed to load CSV.")
-        return
+        raise Exception("CSV could not be loaded")
 
     matched_count, total_skus = bulk_update_inventory(shop, df, shopify_skus, location_id)
-    print(f"✅ [RQ] Inventory update complete. Matched {matched_count} out of {total_skus}.")
+    print(f"[CELERY TASK] Done. Matched {matched_count} / {total_skus} SKUs")
+    return {"matched": matched_count, "total": total_skus}
 
 
 celery = Celery(app.name, broker='redis://localhost:6379/0')
