@@ -95,8 +95,6 @@ from redis import SSLConnection
 import ssl
 
 def make_celery(app):
-    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")  # fallback only if nothing set
-
     celery = Celery(
         app.import_name,
         broker=redis_url,
@@ -104,6 +102,8 @@ def make_celery(app):
     )
     celery.conf.update(app.config)
     return celery
+
+
 
 
 # ✅ Initialize Celery (make sure this is BEFORE any @celery.task usage)
