@@ -34,7 +34,6 @@ import redis
 import traceback
 import pickle
 from gunicorn.app.base import BaseApplication
-from celery import Celery
 from flask_caching import Cache
 from threading import Thread
 from flask import current_app
@@ -92,6 +91,8 @@ print(f"🔍 [DEBUG] SQLALCHEMY_DATABASE_URI = {db_url}")
 print(f"🔍 [DEBUG] REDIS_URL = {redis_url}")
 
 
+from celery import Celery
+
 def make_celery(app):
     redis_url = "rediss://default:AcsbAAIjcDFkZmRhMDc2MWZlZjA0NTA3OGJiNzI4ODYwNTRmMGNjMXAxMA@large-bull-51995.upstash.io:6379"
 
@@ -103,6 +104,37 @@ def make_celery(app):
     celery.conf.update(app.config)
     return celery
 
+# ✅ Initialize Celery (make sure this is BEFORE any @celery.task usage)
+celery = make_celery(app)
+
+@celery.task
+def update_inventory_task(shop):
+    print(f"🔧 Running inventory update for shop: {shop}")
+
+    # You can move your logic from trigger_update here:
+    user = User.query.filter_by(shopify_domain=shop).first()
+    if not user:
+        raise ValueError("Shopify store not found.")
+
+    if not download_csv_from_ftp():
+        raise ValueError("Failed to download CSV file from FTP server.")
+
+    location_id = get_shopify_location_id(shop, user.shopify_token)
+    if not location_id:
+        raise ValueError("Failed to fetch location ID from Shopify.")
+
+    shopify_skus = fetch_shopify_skus_concurrent(shop)
+    if not shopify_skus:
+        raise ValueError("Failed to fetch SKUs from Shopify.")
+
+    df = load_csv()
+    if df is None:
+        raise ValueError("CSV data could not be loaded.")
+
+    matched_count, total_skus = bulk_update_inventory(shop, df, shopify_skus, location_id)
+    print(f"✅ Matched {matched_count} SKUs out of {total_skus}.")
+
+    return {"matched_count": matched_count, "total_skus": total_skus}
 
 
 def update_shopify_data_background(app, shop, access_token, email):
@@ -1430,22 +1462,27 @@ def bulk_update_inventory(shop, df, shopify_skus, location_id):
 
 
 
-@app.route('/inventory/trigger_update', methods=['POST'])
+@app.route("/inventory/trigger_update", methods=["POST"])
 def trigger_update():
-    print("🟡 Triggering inventory/pricing update via background task...")
     try:
-        shop = None
-        if request.is_json:
-            shop = request.get_json().get("shopify_domain")
+        data = request.get_json()
+        shop = data.get("shopify_domain")
 
         if not shop:
-            return jsonify({"status": "error", "message": "Missing shopify_domain in request."}), 400
+            return jsonify({"status": "error", "message": "Missing Shopify domain"}), 400
 
-        task = celery.tasks["run_inventory_update"].delay(shop)
-        return jsonify({"status": "success", "message": "Task started", "task_id": task.id})
+        print(f"🟡 Triggering inventory/pricing update via background task for {shop}...")
+
+        # Trigger Celery task
+        result = update_inventory_task.delay(shop)
+
+        return jsonify({
+            "status": "success",
+            "message": f"Task queued for {shop}. Task ID: {result.id}"
+        })
 
     except Exception as e:
-        print(f"❌ Failed to enqueue task: {e}")
+        print(f"❌ Failed to enqueue task: {str(e)}")
         return jsonify({"status": "error", "message": "Failed to start background task."}), 500
 
 @celery.task
