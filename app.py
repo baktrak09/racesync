@@ -123,46 +123,37 @@ celery = make_celery(app)
 
 @celery.task
 def update_inventory_task(shop):
-    print(f"🔧 Starting inventory update for: {shop}")
+    print(f"🔧 Running inventory update for shop: {shop}")
 
     user = User.query.filter_by(shopify_domain=shop).first()
     if not user:
-        print("❌ User not found.")
-        return {"matched_count": 0, "total_skus": 0}
+        print("❌ User not found for shop:", shop)
+        return
 
-    print("✅ User found.")
-
-    if not download_csv_from_ftp(user.id):
-        print("❌ CSV download failed.")
-        return {"matched_count": 0, "total_skus": 0}
-
-    print("✅ CSV downloaded.")
+    if not download_csv_from_ftp():
+        print("❌ Failed to download CSV from FTP")
+        return
 
     location_id = get_shopify_location_id(shop, user.shopify_token)
+    print(f"📦 Shopify Location ID: {location_id}")
     if not location_id:
-        print("❌ Failed to get Shopify location ID.")
-        return {"matched_count": 0, "total_skus": 0}
-
-    print(f"✅ Shopify Location ID: {location_id}")
+        print("❌ Location ID fetch failed")
+        return
 
     shopify_skus = fetch_shopify_skus_concurrent(shop)
+    print(f"🔍 Fetched {len(shopify_skus)} SKUs from Shopify" if shopify_skus else "❌ No SKUs fetched from Shopify")
     if not shopify_skus:
-        print("❌ No SKUs fetched from Shopify.")
-        return {"matched_count": 0, "total_skus": 0}
-
-    print(f"✅ Pulled {len(shopify_skus)} SKUs from Shopify")
+        return
 
     df = load_csv()
+    print(f"📄 CSV loaded with {len(df)} rows" if df is not None else "❌ CSV failed to load")
     if df is None:
-        print("❌ CSV data could not be loaded.")
-        return {"matched_count": 0, "total_skus": 0}
-
-    print(f"✅ CSV loaded. Rows: {len(df)}")
+        return
 
     matched_count, total_skus = bulk_update_inventory(shop, df, shopify_skus, location_id)
-    print(f"✅ Matched {matched_count} SKUs out of {total_skus} total SKUs.")
-
+    print(f"✅ Matched {matched_count} SKUs out of {total_skus}.")
     return {"matched_count": matched_count, "total_skus": total_skus}
+
 
 
 
