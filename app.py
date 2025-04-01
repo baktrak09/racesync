@@ -116,35 +116,47 @@ celery = make_celery(app)
 
 @celery.task
 def update_inventory_task(shop):
-    try:
-        print(f"🔧 Running inventory update for shop: {shop}")
+    print(f"🔧 Starting inventory update for: {shop}")
 
-        user = User.query.filter_by(shopify_domain=shop).first()
-        if not user:
-            raise ValueError("Shopify store not found.")
+    user = User.query.filter_by(shopify_domain=shop).first()
+    if not user:
+        print("❌ User not found.")
+        return {"matched_count": 0, "total_skus": 0}
 
-        if not download_csv_from_ftp(user.id):
-            raise ValueError("Failed to download CSV file from FTP server.")
+    print("✅ User found.")
 
-        location_id = get_shopify_location_id(shop, user.shopify_token)
-        if not location_id:
-            raise ValueError("Failed to fetch location ID from Shopify.")
+    if not download_csv_from_ftp(user.id):
+        print("❌ CSV download failed.")
+        return {"matched_count": 0, "total_skus": 0}
 
-        shopify_skus = fetch_shopify_skus_concurrent(shop)
-        if not shopify_skus:
-            raise ValueError("Failed to fetch SKUs from Shopify.")
+    print("✅ CSV downloaded.")
 
-        df = load_csv()
-        if df is None:
-            raise ValueError("CSV data could not be loaded.")
+    location_id = get_shopify_location_id(shop, user.shopify_token)
+    if not location_id:
+        print("❌ Failed to get Shopify location ID.")
+        return {"matched_count": 0, "total_skus": 0}
 
-        matched_count, total_skus = bulk_update_inventory(shop, df, shopify_skus, location_id)
-        print(f"✅ Inventory update completed for {shop} — Matched SKUs: {matched_count} / {total_skus}")
-        return {"matched_count": matched_count, "total_skus": total_skus}
+    print(f"✅ Shopify Location ID: {location_id}")
 
-    except Exception as e:
-        print(f"❌ Inventory update failed for {shop}: {e}")
-        return {"error": str(e)}
+    shopify_skus = fetch_shopify_skus_concurrent(shop)
+    if not shopify_skus:
+        print("❌ No SKUs fetched from Shopify.")
+        return {"matched_count": 0, "total_skus": 0}
+
+    print(f"✅ Pulled {len(shopify_skus)} SKUs from Shopify")
+
+    df = load_csv()
+    if df is None:
+        print("❌ CSV data could not be loaded.")
+        return {"matched_count": 0, "total_skus": 0}
+
+    print(f"✅ CSV loaded. Rows: {len(df)}")
+
+    matched_count, total_skus = bulk_update_inventory(shop, df, shopify_skus, location_id)
+    print(f"✅ Matched {matched_count} SKUs out of {total_skus} total SKUs.")
+
+    return {"matched_count": matched_count, "total_skus": total_skus}
+
 
 
 
