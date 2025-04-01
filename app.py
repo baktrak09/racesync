@@ -92,6 +92,16 @@ print(f"🔍 [DEBUG] SQLALCHEMY_DATABASE_URI = {db_url}")
 print(f"🔍 [DEBUG] REDIS_URL = {redis_url}")
 
 
+def make_celery(app):
+    celery = Celery(
+        app.import_name,
+        broker="rediss://default:AcsbAAIjcDFkZmRhMDc2MWZlZjA0NTA3OGJiNzI4ODYwNTRmMGNjMXAxMA@large-bull-51995.upstash.io:6379",
+        backend="rediss://default:AcsbAAIjcDFkZmRhMDc2MWZlZjA0NTA3OGJiNzI4ODYwNTRmMGNjMXAxMA@large-bull-51995.upstash.io:6379"
+    )
+    celery.conf.update(app.config)
+    return celery
+
+celery = make_celery(app)
 
 
 def update_shopify_data_background(app, shop, access_token, email):
@@ -1419,25 +1429,28 @@ def bulk_update_inventory(shop, df, shopify_skus, location_id):
 
 
 
-@app.route('/inventory/trigger_update', methods=['POST'])
+@app.route("/inventory/trigger_update", methods=["POST"])
 def trigger_update():
-    print("🟡 Triggering inventory/pricing update via background task...")
-    shop = None
-    if request.is_json:
-        data = request.get_json()
-        shop = data.get("shopify_domain")
-
-    if not shop:
-        return jsonify({"status": "error", "message": "Missing shopify_domain in request."}), 400
-
-    # ✅ Queue the task with RQ
     try:
-        queue.enqueue(run_inventory_update, shop)
-        print(f"✅ Task queued for {shop}")
-        return jsonify({"status": "queued", "message": f"Inventory update started in background for {shop}."})
+        print("🟡 Triggering inventory/pricing update via background task...")
+
+        shop = request.get_json().get("shopify_domain")
+        if not shop:
+            return jsonify({"status": "error", "message": "Missing shopify_domain"}), 400
+
+        task = run_inventory_update.delay(shop)  # 🎯 Here’s the fix – using `celery` task
+        return jsonify({"status": "success", "message": "Background task started!", "task_id": task.id})
+
     except Exception as e:
         print(f"❌ Failed to enqueue task: {e}")
         return jsonify({"status": "error", "message": "Failed to start background task."}), 500
+
+@celery.task
+def run_inventory_update(shop):
+    print(f"[CELERY TASK] Running inventory update for {shop}")
+    # Call your actual update logic here
+    # download_csv_from_ftp(), fetch_shopify_skus_concurrent(), etc.
+    return "Update complete!"
 
 
 
