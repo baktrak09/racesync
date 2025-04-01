@@ -1500,6 +1500,7 @@ def trigger_update():
     try:
         print(f"🟡 Triggering inventory/pricing update via background task for {shop}...")
         task = update_inventory_task.delay(shop)
+        print(f"📤 Task {task.id} queued for {shop}")
         return jsonify({
             "message": f"Inventory and pricing update task started for {shop}.",
             "task_id": task.id
