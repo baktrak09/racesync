@@ -91,7 +91,8 @@ print(f"🔍 [DEBUG] SQLALCHEMY_DATABASE_URI = {db_url}")
 print(f"🔍 [DEBUG] REDIS_URL = {redis_url}")
 
 
-from celery import Celery
+from redis import SSLConnection
+import ssl
 
 def make_celery(app):
     redis_url = "rediss://default:AcsbAAIjcDFkZmRhMDc2MWZlZjA0NTA3OGJiNzI4ODYwNTRmMGNjMXAxMA@large-bull-51995.upstash.io:6379"
@@ -100,6 +101,12 @@ def make_celery(app):
         app.import_name,
         broker=redis_url,
         backend=redis_url,
+        broker_use_ssl={
+            "ssl_cert_reqs": ssl.CERT_NONE  # You can also try CERT_REQUIRED for stricter validation
+        },
+        redis_backend_use_ssl={
+            "ssl_cert_reqs": ssl.CERT_NONE
+        }
     )
     celery.conf.update(app.config)
     return celery
