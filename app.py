@@ -94,14 +94,26 @@ from celery import Celery
 from redis import SSLConnection
 import ssl
 
+from ssl import CERT_NONE
+
 def make_celery(app):
     celery = Celery(
         app.import_name,
         broker=redis_url,
         backend=redis_url,
     )
+
     celery.conf.update(app.config)
+
+    celery.conf.broker_use_ssl = {
+        'ssl_cert_reqs': CERT_NONE  # Or use CERT_REQUIRED if you're verifying
+    }
+    celery.conf.redis_backend_use_ssl = {
+        'ssl_cert_reqs': CERT_NONE
+    }
+
     return celery
+
 
 
 
