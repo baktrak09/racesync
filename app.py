@@ -93,15 +93,16 @@ print(f"🔍 [DEBUG] REDIS_URL = {redis_url}")
 
 
 def make_celery(app):
+    redis_url = "rediss://default:AcsbAAIjcDFkZmRhMDc2MWZlZjA0NTA3OGJiNzI4ODYwNTRmMGNjMXAxMA@large-bull-51995.upstash.io:6379"
+
     celery = Celery(
         app.import_name,
-        broker="rediss://default:AcsbAAIjcDFkZmRhMDc2MWZlZjA0NTA3OGJiNzI4ODYwNTRmMGNjMXAxMA@large-bull-51995.upstash.io:6379",
-        backend="rediss://default:AcsbAAIjcDFkZmRhMDc2MWZlZjA0NTA3OGJiNzI4ODYwNTRmMGNjMXAxMA@large-bull-51995.upstash.io:6379"
+        broker=redis_url,
+        backend=redis_url,
     )
     celery.conf.update(app.config)
     return celery
 
-celery = make_celery(app)
 
 
 def update_shopify_data_background(app, shop, access_token, email):
