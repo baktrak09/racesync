@@ -3580,6 +3580,11 @@ def run_inventory_update(shop):
     print(f"[CELERY TASK] Done. Matched {matched_count} / {total_skus} SKUs")
     return {"matched": matched_count, "total": total_skus}
 
+@app.route('/inventory/task_status/<task_id>', methods=['GET'])
+def get_task_status(task_id):
+    task = celery.AsyncResult(task_id)
+    return jsonify({"status": task.status, "result": task.result})
+
 
 celery = Celery(app.name, broker='redis://localhost:6379/0')
 
