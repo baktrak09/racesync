@@ -43,7 +43,7 @@ from datetime import datetime, timedelta
 # ✅ Initialize Flask App
 app = Flask(__name__)
 
-# ✅ Load and fix DB URI
+# ✅ PostgreSQL (Render-hosted) DB URI Fix
 db_url = os.getenv("SQLALCHEMY_DATABASE_URI")
 if "?sslmode=" in db_url:
     db_url = db_url.replace("?sslmode=prefer", "?sslmode=require")
@@ -59,17 +59,17 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_pre_ping": True,
 }
 
-# ✅ Redis Session Config (Hardcoded Upstash URL)
-redis_url = "redis://default:AcsbAAIjcDFkZmRhMDc2MWZlZjA0NTA3OGJiNzI4ODYwNTRmMGNjMXAxMA@large-bull-51995.upstash.io:6379"
+# ✅ Upstash Redis URL (No .env used)
+redis_url = "rediss://default:AcsbAAIjcDFkZmRhMDc2MWZlZjA0NTA3OGJiNzI4ODYwNTRmMGNjMXAxMA@large-bull-51995.upstash.io:6379"
 
-
+# ✅ Session Config using Redis
 app.config.update({
     "SESSION_TYPE": "redis",
+    "SESSION_REDIS": redis.StrictRedis.from_url(redis_url),
     "SESSION_PERMANENT": True,
+    "PERMANENT_SESSION_LIFETIME": timedelta(days=7),
     "SESSION_USE_SIGNER": True,
     "SESSION_KEY_PREFIX": "racesync_session:",
-    "SESSION_REDIS": redis.StrictRedis.from_url(redis_url),
-    "PERMANENT_SESSION_LIFETIME": timedelta(days=7),
     "SESSION_SERIALIZATION_METHOD": pickle,
     "SECRET_KEY": os.getenv("FLASK_SECRET_KEY", "fallback_secret_key")
 })
