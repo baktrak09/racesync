@@ -90,7 +90,7 @@ from models import ShopifyCache, User, Setting
 print(f"🔍 [DEBUG] SQLALCHEMY_DATABASE_URI = {db_url}")
 print(f"🔍 [DEBUG] REDIS_URL = {redis_url}")
 
-
+from celery import Celery
 from redis import SSLConnection
 import ssl
 
