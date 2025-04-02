@@ -137,7 +137,7 @@ def update_inventory_task(shop):
         print(f"✅ [USER FOUND] User ID: {user.id}, Shop: {shop}")
 
         # 🔁 2. Download latest CSV
-        if not download_csv_from_ftp():
+        if not download_csv_from_ftp(user.id):
             print("❌ [FTP ERROR] Failed to download CSV from FTP server.")
             return {"error": "FTP CSV download failed."}
         print("✅ [FTP SUCCESS] CSV file downloaded.")
