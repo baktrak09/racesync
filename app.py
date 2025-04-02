@@ -39,6 +39,8 @@ from threading import Thread
 from flask import current_app
 from datetime import datetime, timedelta
 
+
+
 # ✅ Initialize Flask App
 app = Flask(__name__)
 
@@ -93,6 +95,8 @@ print(f"🔍 [DEBUG] REDIS_URL = {redis_url}")
 from celery import Celery
 from redis import SSLConnection
 import ssl
+from celery_worker import celery
+
 
 from ssl import CERT_NONE
 
@@ -118,10 +122,9 @@ def make_celery(app):
 
 
 
-# ✅ Initialize Celery (make sure this is BEFORE any @celery.task usage)
-celery = make_celery(app)
 
-@celery.task
+
+@celery.task(name='update_inventory_task')
 def update_inventory_task(shop):
     print(f"🔧 Running inventory update for shop: {shop}")
 

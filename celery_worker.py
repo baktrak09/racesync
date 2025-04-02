@@ -1,6 +1,4 @@
-from app import app, make_celery
+from app import create_app, make_celery
 
-celery = make_celery(app)
-
-# This is needed so celery -A celery_worker works
-app.app_context().push()
+flask_app = create_app()
+celery = make_celery(flask_app)
