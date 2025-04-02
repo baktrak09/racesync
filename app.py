@@ -38,8 +38,8 @@ from flask_caching import Cache
 from threading import Thread
 from flask import current_app
 from datetime import datetime, timedelta
-
-
+from celery import Celery
+import ssl
 
 # ✅ Initialize Flask App
 app = Flask(__name__)
@@ -72,7 +72,8 @@ app.config.update({
     "SESSION_USE_SIGNER": True,
     "SESSION_KEY_PREFIX": "racesync_session:",
     "SESSION_SERIALIZATION_METHOD": pickle,
-    "SECRET_KEY": os.getenv("FLASK_SECRET_KEY", "fallback_secret_key")
+    "SECRET_KEY": os.getenv("FLASK_SECRET_KEY", "fallback_secret_key"),
+    "REDIS_URL": redis_url
 })
 
 # ✅ Initialize Extensions
@@ -92,37 +93,27 @@ from models import ShopifyCache, User, Setting
 print(f"🔍 [DEBUG] SQLALCHEMY_DATABASE_URI = {db_url}")
 print(f"🔍 [DEBUG] REDIS_URL = {redis_url}")
 
-from celery import Celery
-from redis import SSLConnection
-import ssl
-from celery_worker import celery
-
-
-from ssl import CERT_NONE
 
 def make_celery(app):
-    celery = Celery(
-        app.import_name,
-        broker=redis_url,
-        backend=redis_url,
-    )
+    redis_url = app.config['REDIS_URL']
+    celery = Celery(app.import_name, broker=redis_url, backend=redis_url)
+
+    # SSL config for rediss://
+    celery.conf.broker_use_ssl = {'ssl_cert_reqs': ssl.CERT_NONE}
+    celery.conf.result_backend_use_ssl = {'ssl_cert_reqs': ssl.CERT_NONE}
 
     celery.conf.update(app.config)
 
-    celery.conf.broker_use_ssl = {
-        'ssl_cert_reqs': CERT_NONE  # Or use CERT_REQUIRED if you're verifying
-    }
-    celery.conf.redis_backend_use_ssl = {
-        'ssl_cert_reqs': CERT_NONE
-    }
+    class ContextTask(celery.Task):
+        def __call__(self, *args, **kwargs):
+            with app.app_context():
+                return self.run(*args, **kwargs)
 
+    celery.Task = ContextTask
     return celery
 
-
-
-
-
-
+# ✅ Initialize Celery and attach to app
+celery = make_celery(app)
 
 @celery.task(name='update_inventory_task')
 def update_inventory_task(shop):
@@ -3651,9 +3642,8 @@ def get_task_status(task_id):
     return jsonify({"status": task.status, "result": task.result})
 
 
-celery = Celery(app.name, broker='redis://localhost:6379/0')
 
-celery = Celery(app.name, broker='redis://localhost:6379/0')
+
 
 @celery.task
 def fetch_vendors_task(shopify_domain, access_token):
