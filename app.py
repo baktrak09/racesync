@@ -125,36 +125,60 @@ celery = make_celery(app)
 
 @celery.task(name='update_inventory_task')
 def update_inventory_task(shop):
-    print(f"🔧 Running inventory update for shop: {shop}")
+    print(f"🛠️ [TASK START] Inventory update triggered for shop: {shop}")
 
-    user = User.query.filter_by(shopify_domain=shop).first()
-    if not user:
-        print("❌ User not found for shop:", shop)
-        return
+    try:
+        # 🔍 1. Lookup user
+        user = User.query.filter_by(shopify_domain=shop).first()
+        if not user:
+            print(f"❌ [USER ERROR] No user found with domain: {shop}")
+            return {"error": f"User not found for shop: {shop}"}
 
-    if not download_csv_from_ftp():
-        print("❌ Failed to download CSV from FTP")
-        return
+        print(f"✅ [USER FOUND] User ID: {user.id}, Shop: {shop}")
 
-    location_id = get_shopify_location_id(shop, user.shopify_token)
-    print(f"📦 Shopify Location ID: {location_id}")
-    if not location_id:
-        print("❌ Location ID fetch failed")
-        return
+        # 🔁 2. Download latest CSV
+        if not download_csv_from_ftp():
+            print("❌ [FTP ERROR] Failed to download CSV from FTP server.")
+            return {"error": "FTP CSV download failed."}
+        print("✅ [FTP SUCCESS] CSV file downloaded.")
 
-    shopify_skus = fetch_shopify_skus_concurrent(shop)
-    print(f"🔍 Fetched {len(shopify_skus)} SKUs from Shopify" if shopify_skus else "❌ No SKUs fetched from Shopify")
-    if not shopify_skus:
-        return
+        # 📦 3. Get Shopify Location ID
+        location_id = get_shopify_location_id(shop, user.shopify_token)
+        if not location_id:
+            print(f"❌ [SHOPIFY ERROR] Could not fetch location ID for {shop}")
+            return {"error": "Location ID fetch failed."}
+        print(f"✅ [LOCATION ID] {location_id}")
 
-    df = load_csv()
-    print(f"📄 CSV loaded with {len(df)} rows" if df is not None else "❌ CSV failed to load")
-    if df is None:
-        return
+        # 📋 4. Get all Shopify SKUs
+        shopify_skus = fetch_shopify_skus_concurrent(shop)
+        if not shopify_skus:
+            print("❌ [SKU ERROR] No SKUs fetched from Shopify.")
+            return {"error": "No SKUs found."}
+        print(f"✅ [SKU FETCHED] Found {len(shopify_skus)} SKUs.")
 
-    matched_count, total_skus = bulk_update_inventory(shop, df, shopify_skus, location_id)
-    print(f"✅ Matched {matched_count} SKUs out of {total_skus}.")
-    return {"matched_count": matched_count, "total_skus": total_skus}
+        # 📄 5. Load CSV to DataFrame
+        df = load_csv()
+        if df is None or df.empty:
+            print("❌ [CSV ERROR] CSV failed to load or is empty.")
+            return {"error": "CSV load failed."}
+        print(f"✅ [CSV LOADED] {len(df)} rows in CSV.")
+
+        # 🧠 6. Match SKUs & Update Inventory
+        matched_count, total_skus = bulk_update_inventory(shop, df, shopify_skus, location_id)
+        print(f"✅ [INVENTORY SYNC] Matched {matched_count} / {total_skus} SKUs.")
+
+        return {
+            "matched_count": matched_count,
+            "total_skus": total_skus,
+            "message": f"Inventory updated for {shop}."
+        }
+
+    except Exception as e:
+        print(f"🔥 [TASK CRASH] {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {"error": str(e)}
+
 
 
 
