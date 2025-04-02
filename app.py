@@ -96,13 +96,20 @@ print(f"🔍 [DEBUG] REDIS_URL = {redis_url}")
 
 def make_celery(app):
     redis_url = app.config['REDIS_URL']
-    celery = Celery(app.import_name, broker=redis_url, backend=redis_url)
 
-    # SSL config for rediss://
-    celery.conf.broker_use_ssl = {'ssl_cert_reqs': ssl.CERT_NONE}
-    celery.conf.result_backend_use_ssl = {'ssl_cert_reqs': ssl.CERT_NONE}
+    celery = Celery(
+        app.import_name,
+        broker=redis_url,
+        backend=redis_url,
+    )
 
     celery.conf.update(app.config)
+
+    # Apply SSL settings for rediss
+    ssl_options = {'ssl_cert_reqs': ssl.CERT_NONE}
+    celery.conf.broker_use_ssl = ssl_options
+    celery.conf.redis_backend_use_ssl = ssl_options
+    celery.conf.result_backend_transport_options = {'ssl_cert_reqs': ssl.CERT_NONE}
 
     class ContextTask(celery.Task):
         def __call__(self, *args, **kwargs):
@@ -111,6 +118,7 @@ def make_celery(app):
 
     celery.Task = ContextTask
     return celery
+
 
 # ✅ Initialize Celery and attach to app
 celery = make_celery(app)
