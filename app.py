@@ -125,14 +125,21 @@ celery = make_celery(app)
 
 @celery.task(name='update_inventory_task')
 def update_inventory_task(shop):
-    print(f"🛠️ [TASK START] Inventory update triggered for shop: {shop}")
+    print("🐛 DEBUG: Task STARTED for shop:", shop)
 
     try:
-        # 🔍 1. Lookup user
-        user = User.query.filter_by(shopify_domain=shop).first()
-        if not user:
-            print(f"❌ [USER ERROR] No user found with domain: {shop}")
-            return {"error": f"User not found for shop: {shop}"}
+        with open("/tmp/task_log.txt", "a") as f:
+            f.write(f"[{datetime.utcnow()}] STARTED task for: {shop}\n")
+    except Exception as e:
+        print("⚠️ Failed to write log:", e)
+
+    # KEEP THIS even if FTP fails
+    print("📡 Fetching user from database...")
+
+    user = User.query.filter_by(shopify_domain=shop).first()
+    if not user:
+        print("❌ User not found for shop:", shop)
+        return
 
         print(f"✅ [USER FOUND] User ID: {user.id}, Shop: {shop}")
 
