@@ -123,7 +123,12 @@ def make_celery(app):
 # ✅ Initialize Celery and attach to app
 celery = make_celery(app)
 
-@celery.task(name='update_inventory_task')
+@app.route("/test-task")
+def test_task():
+    result = update_inventory_task.delay("debug-test.myshopify.com")
+    return f"Task queued: {result.id}"
+
+@celery.task
 def update_inventory_task(shop):
     try:
         print("🐛 DEBUG: Task STARTED for shop:", shop)
@@ -1362,46 +1367,6 @@ if not ftp_host or not ftp_user or not ftp_pass:
     if not FTP_CREDENTIALS:
         print("[WARNING] Missing FTP credentials. Some features may not work.")
 
-import ftplib
-
-def validate_ftp_credentials(host, username, password):
-    try:
-        with ftplib.FTP(host) as ftp:
-            ftp.login(username, password)
-            print("FTP credential validation successful.")
-            return True
-    except ftplib.all_errors as e:
-        print(f"FTP credential validation failed: {e}")
-        return False
-
-def update_user_ftp_settings(user_id, host, username, password):
-    if validate_ftp_credentials(host, username, password):
-        # Proceed with updating user settings in the database
-        update_ftp_credentials_in_db(user_id, host, username, password)
-        print("User FTP settings updated successfully.")
-    else:
-        print("Failed to update user FTP settings due to invalid credentials.")
-
-def perform_ftp_operation(user_id):
-    # Fetch credentials dynamically
-    creds = get_user_ftp_credentials(user_id)
-    if not creds or not all([creds['host'], creds['username'], creds['password']]):
-        print("FTP operation aborted: Missing credentials.")
-        return False
-    
-    # Assuming validation is already done
-    try:
-        with ftplib.FTP(creds['host']) as ftp:
-            ftp.login(creds['username'], creds['password'])
-            # perform the required FTP operations
-            print("FTP operation performed successfully.")
-            return True
-    except ftplib.all_errors as e:
-        print(f"FTP operation failed: {e}")
-        return False
-
-
-
 def connect_to_ftp(user_id):
     """Establish FTP connection using user-specific credentials."""
     creds = get_user_ftp_credentials(user_id)
@@ -1423,23 +1388,15 @@ def download_csv_from_ftp(user_id):
     """Download CSV inventory file from FTP server using user credentials."""
     print("Connecting to FTP server...")
 
-    # Fetch FTP credentials dynamically
-    creds = get_user_ftp_credentials(user_id)
-    if not creds or not creds['FTP_HOST'] or not creds['FTP_USER'] or not creds['FTP_PASS']:
-        print("[ERROR] FTP credentials are missing or incomplete.")
+    ftp = connect_to_ftp(user_id)
+    if not ftp:
         return False
 
     try:
-        ftp = FTP(creds['FTP_HOST'])
-        ftp.login(creds['FTP_USER'], creds['FTP_PASS'])
-        print("[DEBUG] Connected to FTP server successfully.")
-
-        # Check if the CSV file exists
-        files = ftp.nlst()
-        if CSV_FILENAME in files:
-            local_path = f"./{CSV_FILENAME}"
-            with open(local_path, 'wb') as f:
-                ftp.retrbinary(f"RETR {CSV_FILENAME}", f.write)
+        print("Checking for the CSV file...")
+        if CSV_FILENAME in ftp.nlst():  # List files in FTP directory
+            with open(CSV_FILENAME, "wb") as file:
+                ftp.retrbinary(f"RETR {CSV_FILENAME}", file.write)
             print(f"[SUCCESS] {CSV_FILENAME} downloaded successfully.")
             ftp.quit()
             return True
@@ -1447,9 +1404,8 @@ def download_csv_from_ftp(user_id):
             print(f"[ERROR] {CSV_FILENAME} not found on FTP server.")
             ftp.quit()
             return False
-
     except Exception as e:
-        print(f"[ERROR] FTP operation failed: {e}")
+        print(f"[ERROR] Failed to download from FTP: {e}")
         return False
 
 
@@ -3742,6 +3698,8 @@ def update_vendors():
     access_token = request.json.get("access_token")
     task = fetch_vendors_task.delay(shopify_domain, access_token)
     return jsonify({"task_id": task.id}), 202
+
+
 
 with app.app_context():
     db.create_all()
