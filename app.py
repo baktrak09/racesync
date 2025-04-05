@@ -130,6 +130,8 @@ def test_task():
 
 @celery.task
 def update_inventory_task(shop):
+    print("🧪 [DEBUG] Celery Task has officially started for shop:", shop)
+
     try:
         print("🐛 DEBUG: Task STARTED for shop:", shop)
 
@@ -367,34 +369,6 @@ def load_user_credentials():
         traceback.print_exc()
         flash("An error occurred while loading user credentials.", "danger")
         return redirect(url_for("logout"))
-
-
-
-
-# ✅ Define Shopify Headers (Only if the token exists)
-def get_shopify_headers(shop):
-    """Retrieve Shopify API headers with OAuth token from DB."""
-    try:
-        connection = sqlite3.connect(DATABASE_PATH)
-        cursor = connection.cursor()
-        cursor.execute("SELECT access_token FROM shops WHERE shop_url=?", (shop,))
-        result = cursor.fetchone()
-        connection.close()
-
-        if not result:
-            print(f"[ERROR] No OAuth token found for {shop}")
-            return None
-
-        access_token = result[0]
-        print(f"[DEBUG] Using Access Token for {shop}: {access_token[:5]}...")  # Show only first 5 characters
-
-        return {
-            "X-Shopify-Access-Token": access_token,
-            "Content-Type": "application/json"
-        }
-    except Exception as e:
-        print(f"[ERROR] Failed to fetch Shopify headers: {e}")
-        return None
 
 
 # ✅ Function to Fetch Shopify Products (Only Runs When Needed)
