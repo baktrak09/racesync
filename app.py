@@ -96,19 +96,10 @@ print(f"🔍 [DEBUG] REDIS_URL = {redis_url}")
 
 def make_celery(app):
     redis_url = app.config['REDIS_URL']
-
-    celery = Celery(
-        app.import_name,
-        broker=redis_url,
-        backend=redis_url,
-    )
-
+    celery = Celery(app.import_name, broker=redis_url, backend=redis_url)
     celery.conf.update(app.config)
-
-    # Apply SSL settings for rediss
-    ssl_options = {'ssl_cert_reqs': ssl.CERT_NONE}
-    celery.conf.broker_use_ssl = ssl_options
-    celery.conf.redis_backend_use_ssl = ssl_options
+    celery.conf.broker_use_ssl = {'ssl_cert_reqs': ssl.CERT_NONE}
+    celery.conf.redis_backend_use_ssl = {'ssl_cert_reqs': ssl.CERT_NONE}
     celery.conf.result_backend_transport_options = {'ssl_cert_reqs': ssl.CERT_NONE}
 
     class ContextTask(celery.Task):
@@ -119,18 +110,19 @@ def make_celery(app):
     celery.Task = ContextTask
     return celery
 
-
-# ✅ Initialize Celery and attach to app
+# ✅ Attach Celery instance to app
 celery = make_celery(app)
+print("🚀 Celery instance created and registered.")
 
 @app.route("/test-task")
 def test_task():
     result = update_inventory_task.delay("debug-test.myshopify.com")
     return f"Task queued: {result.id}"
 
-@celery.task
+
+@celery.task(name='update_inventory_task')
 def update_inventory_task(shop):
-    print("✅ Celery task loaded into registry")
+    print("✅ Celery task is RUNNING — this should show in logs.")
     try:
         print("🐛 DEBUG: Task STARTED for shop:", shop)
 
@@ -183,12 +175,13 @@ def update_inventory_task(shop):
             "total_skus": total_skus,
             "message": f"Inventory updated for {shop}."
         }
-
+    
     except Exception as e:
         print(f"🔥 [TASK CRASH] {type(e).__name__}: {str(e)}")
         import traceback
         traceback.print_exc()
         return {"error": str(e)}
+    
 
 
 
