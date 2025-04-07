@@ -130,8 +130,7 @@ def test_task():
 
 @celery.task
 def update_inventory_task(shop):
-    print("🧪 [DEBUG] Celery Task has officially started for shop:", shop)
-
+    print("✅ Celery task loaded into registry")
     try:
         print("🐛 DEBUG: Task STARTED for shop:", shop)
 
