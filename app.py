@@ -96,97 +96,116 @@ print(f"🔍 [DEBUG] REDIS_URL = {redis_url}")
 
 def make_celery(app):
     redis_url = app.config['REDIS_URL']
-    celery = Celery(app.import_name, broker=redis_url, backend=redis_url)
-    celery.conf.update(app.config)
-    celery.conf.broker_use_ssl = {'ssl_cert_reqs': ssl.CERT_NONE}
-    celery.conf.redis_backend_use_ssl = {'ssl_cert_reqs': ssl.CERT_NONE}
-    celery.conf.result_backend_transport_options = {'ssl_cert_reqs': ssl.CERT_NONE}
 
+    celery = Celery(
+        app.import_name,
+        broker=redis_url,
+        backend=redis_url,
+    )
+
+    # Celery configuration
+    celery.conf.update(app.config)
+
+    # SSL options for rediss://
+    ssl_options = {
+        'ssl_cert_reqs': ssl.CERT_NONE
+    }
+
+    celery.conf.broker_use_ssl = ssl_options
+    celery.conf.redis_backend_use_ssl = ssl_options
+    celery.conf.result_backend_transport_options = ssl_options
+
+    # Ensures Flask app context is pushed during task execution
     class ContextTask(celery.Task):
         def __call__(self, *args, **kwargs):
             with app.app_context():
                 return self.run(*args, **kwargs)
 
     celery.Task = ContextTask
+
+    print("🚀 Celery instance created and registered.")
     return celery
 
-# ✅ Attach Celery instance to app
+
+# 🔧 Initialize and bind to Flask app
 celery = make_celery(app)
-print("🚀 Celery instance created and registered.")
 
 @app.route("/test-task")
 def test_task():
     result = update_inventory_task.delay("debug-test.myshopify.com")
-    return f"Task queued: {result.id}"
+    return f"✅ Task queued: {result.id}"
 
 
 @celery.task(name='update_inventory_task')
 def update_inventory_task(shop):
-    print("✅ Celery task is RUNNING — this should show in logs.")
+    print(f"🚀 [CELERY] Task STARTED for shop: {shop}")
+
     try:
-        print("🐛 DEBUG: Task STARTED for shop:", shop)
-
-        # Log start of task
+        # Log to file for Render visibility
         with open("/tmp/task_log.txt", "a") as f:
-            f.write(f"[{datetime.utcnow()}] STARTED task for: {shop}\n")
+            f.write(f"[{datetime.utcnow()}] ✅ Task started for: {shop}\n")
 
-        # Fetch user from database
-        print("📡 Fetching user from database...")
+        # 📦 Find user
         user = User.query.filter_by(shopify_domain=shop).first()
         if not user:
-            print("❌ User not found for shop:", shop)
-            return
-        
-        print(f"✅ [USER FOUND] User ID: {user.id}, Shop: {shop}")
+            msg = f"❌ User not found for shop: {shop}"
+            print(msg)
+            return {"error": msg}
 
-        # Download latest CSV
+        print(f"✅ [USER FOUND] ID: {user.id}")
+
+        # 📥 Download CSV
         if not download_csv_from_ftp(user.id):
-            print("❌ [FTP ERROR] Failed to download CSV from FTP server.")
-            return {"error": "FTP CSV download failed."}
-        print("✅ [FTP SUCCESS] CSV file downloaded.")
+            msg = "❌ [FTP ERROR] Could not download CSV."
+            print(msg)
+            return {"error": msg}
+        print("✅ [FTP SUCCESS] CSV downloaded.")
 
-        # Get Shopify Location ID
+        # 📍 Get location
         location_id = get_shopify_location_id(shop, user.shopify_token)
         if not location_id:
-            print(f"❌ [SHOPIFY ERROR] Could not fetch location ID for {shop}")
-            return {"error": "Location ID fetch failed."}
+            msg = f"❌ [SHOPIFY ERROR] Location ID not found for {shop}"
+            print(msg)
+            return {"error": msg}
         print(f"✅ [LOCATION ID] {location_id}")
 
-        # Get all Shopify SKUs
+        # 🏷️ Fetch SKUs
         shopify_skus = fetch_shopify_skus_concurrent(shop)
         if not shopify_skus:
-            print("❌ [SKU ERROR] No SKUs fetched from Shopify.")
-            return {"error": "No SKUs found."}
-        print(f"✅ [SKU FETCHED] Found {len(shopify_skus)} SKUs.")
+            msg = "❌ [SKU ERROR] No SKUs returned from Shopify."
+            print(msg)
+            return {"error": msg}
+        print(f"✅ [SKU FETCHED] {len(shopify_skus)} found.")
 
-        # Load CSV to DataFrame
+        # 🧾 Load CSV
         df = load_csv()
         if df is None or df.empty:
-            print("❌ [CSV ERROR] CSV failed to load or is empty.")
-            return {"error": "CSV load failed."}
+            msg = "❌ [CSV ERROR] CSV is empty or failed to load."
+            print(msg)
+            return {"error": msg}
         print(f"✅ [CSV LOADED] {len(df)} rows in CSV.")
 
-        # Match SKUs & Update Inventory
+        # 🔁 Match SKUs & update inventory
         matched_count, total_skus = bulk_update_inventory(shop, df, shopify_skus, location_id)
-        print(f"✅ [INVENTORY SYNC] Matched {matched_count} / {total_skus} SKUs.")
+        result_msg = f"✅ [INVENTORY SYNC] Matched {matched_count} / {total_skus} SKUs."
+        print(result_msg)
 
         return {
             "matched_count": matched_count,
             "total_skus": total_skus,
-            "message": f"Inventory updated for {shop}."
+            "message": result_msg
         }
-    
+
     except Exception as e:
-        print(f"🔥 [TASK CRASH] {type(e).__name__}: {str(e)}")
         import traceback
+        error_message = f"🔥 [TASK CRASH] {type(e).__name__}: {str(e)}"
+        print(error_message)
         traceback.print_exc()
+
+        with open("/tmp/task_log.txt", "a") as f:
+            f.write(f"[{datetime.utcnow()}] 🔥 CRASH: {error_message}\n")
+
         return {"error": str(e)}
-    
-
-
-
-
-
 
 
 def update_shopify_data_background(app, shop, access_token, email):
